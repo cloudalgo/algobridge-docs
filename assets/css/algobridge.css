@@ -1,0 +1,244 @@
+/* ============================================================
+   AlgoBridge docs. Dresses Material in the console's vocabulary:
+   ground, surface panels, hairlines, one copper accent, Mona Sans,
+   no shadows, radii 4/3/2. Tokens are in tokens.css.
+   ============================================================ */
+
+/* ---- Material's variables, mapped onto the tokens ---- */
+:root,[data-md-color-scheme=default]{
+  --md-primary-fg-color:var(--ink);
+  --md-primary-fg-color--light:var(--ink-2);
+  --md-primary-fg-color--dark:var(--ink);
+  --md-primary-bg-color:var(--surface);
+  --md-primary-bg-color--light:var(--ink-3);
+  --md-accent-fg-color:var(--accent);
+  --md-accent-fg-color--transparent:var(--accent-soft);
+  --md-default-bg-color:var(--ground);
+  --md-default-fg-color:var(--ink);
+  --md-default-fg-color--light:var(--ink-2);
+  --md-default-fg-color--lighter:var(--ink-3);
+  --md-default-fg-color--lightest:var(--line);
+  --md-typeset-color:var(--ink);
+  --md-typeset-a-color:var(--accent);
+  --md-typeset-mark-color:var(--warn-soft);
+  --md-typeset-table-color:var(--line-2);
+  --md-code-bg-color:var(--sunk);
+  --md-code-fg-color:var(--ink);
+  --md-code-hl-color:var(--accent-soft);
+  --md-code-hl-comment-color:var(--ink-3);
+  --md-code-hl-keyword-color:var(--pg);
+  --md-code-hl-string-color:var(--ok);
+  --md-code-hl-number-color:var(--accent-strong);
+  --md-code-hl-function-color:var(--sf);
+  --md-code-hl-constant-color:var(--accent-strong);
+  --md-code-hl-name-color:var(--ink);
+  --md-code-hl-operator-color:var(--ink-2);
+  --md-code-hl-punctuation-color:var(--ink-3);
+  --md-code-hl-special-color:var(--warn);
+  --md-code-hl-variable-color:var(--ink-2);
+  --md-code-hl-generic-color:var(--ink-2);
+  --md-footer-bg-color:var(--ground);
+  --md-footer-fg-color:var(--ink-2);
+  --md-text-font-family:var(--sans);
+  --md-code-font-family:var(--mono);
+  --md-shadow-z1:none; --md-shadow-z2:none; --md-shadow-z3:none;
+}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- buttons (the console's .btn) ---- */
+.ab-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 14px;border-radius:3px;font:600 13.5px var(--sans);text-decoration:none;border:1px solid transparent;white-space:nowrap}
+.ab-btn--primary,.ab-btn--primary:visited{background:var(--accent);color:var(--on-accent)}
+.ab-btn--primary:hover{background:var(--accent-strong);color:var(--on-accent)}
+.ab-btn--secondary,.ab-btn--secondary:visited{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.ab-btn--secondary:hover{border-color:var(--stone);color:var(--ink)}
+/* inside an article the link colours and underline must not reach the buttons */
+.md-typeset .ab-btn{text-decoration:none}
+.md-typeset .ab-btn--primary,.md-typeset .ab-btn--primary:hover{color:var(--on-accent)}
+.md-typeset .ab-btn--secondary,.md-typeset .ab-btn--secondary:hover{color:var(--ink)}
+.md-typeset .ab-acts,.md-typeset .ab-acts>p{display:flex;flex-wrap:wrap;gap:10px;margin:1.2em 0}
+.md-typeset .ab-acts>p{margin:0}
+
+/* ---- top bar ---- */
+.md-header.ab-top{position:sticky;top:0;height:56px;background:var(--surface);color:var(--ink);border-bottom:1px solid var(--line);box-shadow:none}
+.ab-top__inner{display:flex;align-items:center;gap:24px;height:56px;max-width:1244px;margin:0 auto;padding:0 32px}
+.ab-brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none}
+/* the wordmark: "Algo" regular, "Bridge" black, in the brand face (packages/ui .ab-word) */
+.ab-brand__word{font:400 18px/1 var(--brand);letter-spacing:-.02em;white-space:nowrap}
+.ab-brand__bridge{font-weight:750}
+.ab-brand:hover{color:var(--ink)}
+.ab-top__nav{display:flex;gap:2px;margin-left:8px}
+.ab-top__nav a{color:var(--ink-2);text-decoration:none;font-size:13.5px;padding:6px 10px;border-radius:2px}
+.ab-top__nav a:hover{background:var(--sunk);color:var(--ink)}
+.ab-top__nav a[aria-current=page]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent);border-radius:0}
+.ab-top__right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.ab-top .md-header__button{color:var(--ink-2);margin:0;padding:4px}
+.ab-top .md-header__button:hover{opacity:1;color:var(--ink)}
+.ab-top__menu{margin-left:-8px!important}
+/* search field: a console input, not Material's tinted pill */
+.ab-top .md-search__form{background:var(--surface);border:1px solid var(--line);border-radius:3px;height:32px;box-shadow:none}
+.ab-top .md-search__form:hover{border-color:var(--stone);background:var(--surface)}
+.ab-top .md-search__input{font:400 13.5px var(--sans);color:var(--ink);height:30px}
+.ab-top .md-search__input::placeholder{color:var(--ink-3)}
+.ab-top .md-search__icon{color:var(--ink-3)}
+.ab-top [data-md-toggle=search]:checked~.md-header .md-search__form{border-radius:3px 3px 0 0}
+.md-search__output{border-radius:0 0 3px 3px;border:1px solid var(--line);border-top:0}
+@media screen and (max-width:76.234375em){.ab-top__nav{display:none}}
+@media screen and (max-width:40em){
+  .ab-top__inner{padding:0 16px;gap:12px}
+  .ab-top__cta{display:none}
+}
+
+/* ---- layout ---- */
+.md-grid{max-width:1244px}
+.md-main__inner{margin-top:8px}
+.md-content__inner{margin:0 32px 48px;padding-top:28px}
+@media screen and (max-width:40em){.md-content__inner{margin:0 16px 40px}}
+
+/* ---- sidebar navigation ---- */
+.md-sidebar__scrollwrap{scrollbar-width:thin;scrollbar-color:transparent transparent}
+.md-sidebar__scrollwrap:hover,.md-sidebar__scrollwrap:focus-within{scrollbar-color:var(--stone) transparent}
+.md-nav{font-size:13.5px;line-height:1.4}
+.md-nav__title{color:var(--ink-3)}
+.md-nav__item--section>.md-nav__link,.md-nav__item--section>label.md-nav__link{font:600 10.5px var(--sans)!important;text-transform:uppercase;letter-spacing:.12em;font-stretch:115%;color:var(--ink-3)!important;margin-top:1.2em}
+.md-nav__link{color:var(--ink-2);margin-top:.5em}
+.md-nav__link:hover,.md-nav__link:focus{color:var(--ink)}
+.md-nav__link--active,.md-nav__item .md-nav__link--active{color:var(--accent);font-weight:600}
+/* desktop rail, after the console's: padded rows, a sunk hover, the current page lifted onto
+   the surface with a copper bar, and room between the groups */
+@media screen and (min-width:76.25em){
+  .md-nav--primary>.md-nav__title{display:none}
+  .md-nav--primary .md-nav__list{display:grid;gap:1px}
+  .md-nav--primary .md-nav__link{margin:0;padding:4px 10px;border-radius:2px;position:relative}
+  .md-nav--primary a.md-nav__link:hover{background:var(--sunk);color:var(--ink)}
+  .md-nav--primary .md-nav__link--active{color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+  .md-nav--primary .md-nav__link--active::before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:3px;background:var(--accent)}
+  .md-nav--primary .md-nav__item--section{margin:18px 0 0}
+  .md-nav--primary .md-nav__item--section>.md-nav__link{padding:0;margin:0 0 4px}
+  .md-nav--primary .md-nav__container>a.md-nav__link{padding:2px 10px}
+  .md-nav--primary .md-nav__container>a.md-nav__link:hover{background:none;color:var(--ink)!important}
+  .md-nav--primary .md-nav__container>.md-nav__link--active{background:none;box-shadow:none;color:var(--accent)!important}
+  .md-nav--primary .md-nav__container>.md-nav__link--active::before{display:none}
+  .md-nav--primary .md-nav__item--section+.md-nav__item:not(.md-nav__item--section){margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+}
+/* the page's table of contents: a hairline rail; the section in view takes a copper segment */
+@media screen and (min-width:60em){
+  .md-nav--secondary .md-nav__title{padding:0 0 10px 13px!important}
+  .md-nav--secondary>.md-nav__list{border-left:1px solid var(--line);margin-left:1px;padding-left:0}
+  .md-nav--secondary .md-nav__item{padding:0}
+  .md-nav--secondary .md-nav__link{margin:0 0 0 -1px;padding:4px 0 4px 12px;border-left:2px solid transparent;color:var(--ink-3);line-height:1.35}
+  .md-nav--secondary .md-nav__link:hover{color:var(--ink);border-left-color:var(--stone)}
+  .md-nav--secondary .md-nav__link--passed{color:var(--ink-3)}
+  .md-nav--secondary .md-nav__link--active{color:var(--ink);font-weight:600;border-left-color:var(--accent)}
+  .md-nav--secondary .md-nav .md-nav{margin:0}
+  .md-nav--secondary .md-nav .md-nav .md-nav__link{padding-left:24px;font-size:12.5px}
+}
+.md-nav--secondary .md-nav__title{font:600 10.5px var(--sans);text-transform:uppercase;letter-spacing:.12em;font-stretch:115%;color:var(--ink-3);background:transparent;box-shadow:none}
+@media screen and (max-width:76.234375em){
+  .md-nav--primary .md-nav__title,.md-nav--primary .md-nav__title[for=__drawer]{background:var(--surface);color:var(--ink);font-weight:720;border-bottom:1px solid var(--line)}
+  .md-nav--primary .md-nav__title .md-logo{display:none}
+  .md-sidebar--primary{background:var(--surface)}
+}
+
+/* ---- prose ---- */
+.md-typeset{font-size:.8rem;line-height:1.65;color:var(--ink)}
+.md-typeset h1{font:750 36px/1.08 var(--brand);letter-spacing:-.025em;color:var(--ink);margin:0 0 .6em}
+.md-typeset h2{font:750 23px/1.2 var(--brand);letter-spacing:-.018em;color:var(--ink);margin:2em 0 .6em;padding-top:1.1em;border-top:1px solid var(--line)}
+.md-typeset h3{font:650 17px/1.3 var(--sans);color:var(--ink);margin:1.6em 0 .5em}
+.md-typeset h4{font:600 15px/1.4 var(--sans);color:var(--ink);letter-spacing:0}
+.md-typeset h1+p{font-size:17px;line-height:1.55;color:var(--ink-2);max-width:62ch}
+.md-typeset a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;text-decoration-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.md-typeset a:hover{color:var(--accent-strong);text-decoration-color:currentColor}
+.md-typeset .headerlink{text-decoration:none;color:var(--stone)}
+.md-typeset code{font-size:.86em;border-radius:2px;padding:.1em .35em;background:var(--sunk);color:var(--ink)}
+.md-typeset pre>code{padding:14px 16px;border-radius:3px}
+.md-typeset pre{border:1px solid var(--line-2);border-radius:3px}
+.md-typeset hr{border-bottom:1px solid var(--line)}
+.md-typeset kbd{font:500 .8em var(--mono);border:1px solid var(--line);border-radius:2px;box-shadow:none;background:var(--surface);color:var(--ink)}
+.md-typeset dl dt{font-weight:650}
+
+/* tables: a console panel with caps headings */
+.md-typeset__table{display:block}
+.md-typeset table:not([class]){font-size:13.5px;border:1px solid var(--line);border-radius:4px;background:var(--surface);box-shadow:none;overflow:hidden}
+.md-typeset table:not([class]) th{font:600 10.5px var(--sans);text-transform:uppercase;letter-spacing:.1em;font-stretch:115%;color:var(--ink-3);background:var(--surface);border-bottom:1px solid var(--line);padding:10px 14px;min-width:0}
+.md-typeset table:not([class]) td{border-top:1px solid var(--line-2);padding:10px 14px;vertical-align:top;color:var(--ink-2)}
+.md-typeset table:not([class]) td:first-child{color:var(--ink)}
+.md-typeset table:not([class]) tr:hover{background:var(--hover);box-shadow:none}
+
+/* admonitions: flat notices, coloured by meaning only */
+.md-typeset .admonition,.md-typeset details{border:1px solid var(--line);border-left-width:3px;border-radius:3px;box-shadow:none;background:var(--surface);font-size:13.5px}
+.md-typeset .admonition-title,.md-typeset summary{font:650 13.5px var(--sans);background:transparent!important;border:0;padding-left:2.2rem}
+.md-typeset .admonition-title::before,.md-typeset summary::before{background-color:currentColor!important;left:.7rem}
+.md-typeset .admonition.note,.md-typeset details.note,.md-typeset .admonition.info,.md-typeset details.info{border-left-color:var(--pg)}
+.md-typeset .note>.admonition-title,.md-typeset .info>.admonition-title,.md-typeset .note>summary,.md-typeset .info>summary{color:var(--pg)}
+.md-typeset .admonition.tip,.md-typeset details.tip,.md-typeset .admonition.success{border-left-color:var(--ok)}
+.md-typeset .tip>.admonition-title,.md-typeset .success>.admonition-title,.md-typeset .tip>summary{color:var(--ok)}
+.md-typeset .admonition.warning,.md-typeset details.warning,.md-typeset .admonition.caution{border-left-color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.md-typeset .warning>.admonition-title,.md-typeset .caution>.admonition-title,.md-typeset .warning>summary{color:var(--warn-text)}
+.md-typeset .admonition.danger,.md-typeset .admonition.failure,.md-typeset details.danger{border-left-color:var(--err)}
+.md-typeset .danger>.admonition-title,.md-typeset .failure>.admonition-title{color:var(--err)}
+.md-typeset .admonition.example,.md-typeset .admonition.abstract,.md-typeset .admonition.question{border-left-color:var(--accent)}
+.md-typeset .example>.admonition-title,.md-typeset .abstract>.admonition-title,.md-typeset .question>.admonition-title{color:var(--accent-strong)}
+
+/* tabs: the console's segmented control */
+.md-typeset .tabbed-set{border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.md-typeset .tabbed-labels{box-shadow:inset 0 -1px 0 var(--line-2);padding:0 8px}
+.md-typeset .tabbed-labels>label{font:600 12.5px var(--sans);color:var(--ink-3);padding:10px 8px}
+.md-typeset .tabbed-labels>label:hover{color:var(--ink)}
+.md-typeset .tabbed-set>input:checked+label,.md-typeset .tabbed-labels>label.tabbed-labels__active{color:var(--accent-strong)}
+.md-typeset .tabbed-labels::before{background:var(--accent)}
+.md-typeset .tabbed-content{padding:0 14px}
+.md-typeset .tabbed-block>pre:first-child{margin-top:12px}
+
+/* ---- diagrams: archify pages framed as console panels ---- */
+.md-typeset .ab-diagram{margin:1.2em 0 1.6em}
+.md-typeset .ab-diagram iframe{display:block;width:100%;height:600px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.md-typeset .ab-diagram p{margin:.5em 0 0;font-size:12.5px}
+.md-typeset .ab-diagram p a{color:var(--ink-3)}
+@media screen and (max-width:40em){
+  .md-typeset .ab-diagram iframe{height:480px}
+}
+
+/* steps table: the first column reads as a quiet label */
+.md-typeset .ab-steps table:not([class]) td:first-child{font:500 12px var(--mono);color:var(--ink-3);white-space:nowrap}
+
+/* ---- previous / next ---- */
+.md-typeset .ab-pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:48px 0 0;padding-top:24px;border-top:1px solid var(--line)}
+.md-typeset .ab-pager__link{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:4px;color:var(--ink);text-decoration:none;transition:border-color .15s}
+.md-typeset .ab-pager__link:hover,.md-typeset .ab-pager__link:focus-visible{border-color:var(--stone);color:var(--ink)}
+.md-typeset .ab-pager__link--next{grid-column:2;justify-content:flex-end;text-align:right}
+.ab-pager__text{display:grid;gap:3px;min-width:0}
+.ab-pager__text small{font:500 12.5px var(--sans);color:var(--ink-3)}
+.ab-pager__text span{font:750 16px/1.25 var(--brand);letter-spacing:-.01em}
+.ab-pager__icon{flex:none;fill:none;stroke:var(--ink-3);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s,stroke .15s}
+.ab-pager__link:hover .ab-pager__icon{stroke:var(--accent)}
+.ab-pager__link--prev:hover .ab-pager__icon{transform:translateX(-2px)}
+.ab-pager__link--next:hover .ab-pager__icon{transform:translateX(2px)}
+@media screen and (max-width:40em){.md-typeset .ab-pager{grid-template-columns:1fr}.md-typeset .ab-pager__link--next{grid-column:auto}}
+@media (prefers-reduced-motion:reduce){.ab-pager__link,.ab-pager__icon{transition:none}.ab-pager__link:hover .ab-pager__icon{transform:none}}
+
+/* ---- site foot ---- */
+/* CloudAlgo's offer, the first thing in the foot on every docs page */
+.ab-help{display:flex;align-items:center;justify-content:space-between;gap:24px 40px;flex-wrap:wrap;width:calc(100% - 64px);max-width:1180px;margin:0 auto;padding:28px 0;border-bottom:1px solid var(--line)}
+.ab-help__text{max-width:68ch}
+.ab-help h2{margin:0;font:750 22px/1.2 var(--brand);letter-spacing:-.018em;color:var(--ink)}
+.ab-help p{margin:8px 0 0;line-height:1.5;color:var(--ink-2)}
+.ab-help__acts{display:flex;gap:10px;flex-wrap:wrap}
+/* the same offer, small, under the table of contents */
+.ab-help-card{display:none}
+.md-sidebar--secondary .ab-help-card{display:block;margin:24px 0 0 1px;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:4px;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.ab-help-card p{margin:0 0 12px}
+.ab-help-card .ab-help-card__title{margin:0 0 4px;font:750 15px/1.25 var(--brand);color:var(--ink)}
+.ab-foot{border-top:1px solid var(--line);background:var(--surface);color:var(--ink-3);font-size:13.5px}
+.ab-foot__inner{display:grid;grid-template-columns:minmax(0,1fr) 160px 160px;gap:32px;max-width:1244px;margin:0 auto;padding:36px 32px 32px}
+.ab-foot__about p{margin:12px 0 0;max-width:44ch;line-height:1.5;color:var(--ink-2)}
+.ab-foot__col{display:grid;align-content:start;gap:8px}
+.ab-foot__col h2{margin:0 0 4px;font:600 12.5px var(--sans);color:var(--ink)}
+.ab-foot a:not(.ab-brand):not(.ab-btn){color:var(--ink-2);text-decoration:none;width:fit-content}
+.ab-foot a:not(.ab-brand):not(.ab-btn):hover{color:var(--accent)}
+.ab-foot__base{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;width:calc(100% - 64px);max-width:1180px;margin:0 auto;padding:16px 0 28px;border-top:1px solid var(--line-2);font-size:12.5px}
+@media screen and (max-width:60em){.ab-foot__inner{grid-template-columns:1fr 1fr}.ab-foot__about{grid-column:1/-1}}
+@media screen and (max-width:40em){.ab-foot__inner{padding:28px 16px 24px;gap:24px}.ab-foot__base{width:calc(100% - 32px);padding:14px 0 24px}.ab-help{width:calc(100% - 32px);padding:24px 0}}
+
+/* ---- landing page: Material's article wrappers stand down ---- */
+.md-main__inner:has(.ab-home){max-width:none;margin:0;display:block}

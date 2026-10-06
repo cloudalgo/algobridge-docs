@@ -1,0 +1,40 @@
+/* Values mirror packages/ui/scss/_tokens.scss. The console is light-only,
+   so the docs are too; the Live log well is the one dark surface. */
+:root{
+  --ground:#F3F4F1; --surface:#FFFFFF; --sunk:#ECEEE9; --hover:#F7F8F5;
+  --ink:#17191C; --ink-2:#4A5059; --ink-3:#62696F;
+  --line:#D9DCD5; --line-2:#E8EAE4; --stone:#BFC3BB; --sage:#B9BFB7;
+  --accent:#B24A17; --accent-strong:#933C11; --accent-soft:#F4E6DB; --on-accent:#FFF8F2;
+  --sf:#05779A; --sf-soft:#E0EFF4; --pg:#365F88; --pg-soft:#E5EBF2;
+  --ok:#1C6E3E; --ok-soft:#E1EFE5; --warn:#8A5F08; --warn-soft:#F5EBD3; --warn-line:#E4D2A6; --warn-text:#5F4105;
+  --err:#B2352A; --err-soft:#F6E2DF;
+  --well:#14171A; --well-2:#1D2126; --well-line:#2C3238; --well-ink:#D5D8D2; --well-ink-2:#A3A9B0; --well-ink-3:#7D848C;
+  --lv-warn:#E9BC5E; --lv-warn-bg:rgba(233,188,94,.08); --lv-info:#7FCB98; --lv-debug:#93A4BE;
+  --well-sf:#56BFDD; --well-pg:#9DB9DA; --well-mark:#F0B893;
+  --sans:"Mona Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --brand:"Bricolage Grotesque","Mona Sans",ui-sans-serif,system-ui,sans-serif;
+  color-scheme:light;
+}
+
+/* ---- the In step mark, shared by the header and the footer ----
+   A belt between the Salesforce wheel and the PostgreSQL wheel. In the header
+   it draws on once, the wheels arrive, then the two timing notches turn
+   together and packets ride the two runs of the belt (SMIL, in the partial).
+   At 32px wide and below the small variant drops hub and notch. */
+.ab-mark{display:block;flex:none;overflow:visible}
+.ab-mark .belt{fill:none;stroke:var(--ink)}
+.ab-mark .c-sf{fill:var(--sf)} .ab-mark .c-pg{fill:var(--pg)}
+.ab-mark .spk{transform-box:view-box}
+.ab-mark--live .belt{stroke-dasharray:103;stroke-dashoffset:103;animation:ab-belt 1.1s cubic-bezier(.65,0,.25,1) .1s forwards}
+.ab-mark--live .pul{transform-box:fill-box;transform-origin:center;animation:ab-pop .5s cubic-bezier(.3,1.4,.5,1) .55s both}
+.ab-mark--live .pul.b{animation-delay:.67s}
+.ab-mark--live .spk{animation:ab-spin 6s linear 1.2s infinite}
+@keyframes ab-belt{to{stroke-dashoffset:0}}
+@keyframes ab-pop{0%{transform:scale(0)}70%{transform:scale(1.12)}100%{transform:none}}
+@keyframes ab-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .ab-mark--live .belt{animation:none;stroke-dashoffset:0}
+  .ab-mark--live .pul,.ab-mark--live .spk{animation:none}
+  .ab-mark .pk{display:none}
+}

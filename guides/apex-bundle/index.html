@@ -1,0 +1,1530 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Two-way sync between one Salesforce org and one PostgreSQL database. Self-hosted, open source, and careful with your org's API limits.">
+      
+      
+      
+        <link rel="canonical" href="https://bridge.cloudalgo.com/guides/apex-bundle/">
+      
+      
+        <link rel="prev" href="../change-sources/">
+      
+      
+        <link rel="next" href="../mappings/">
+      
+      
+      <link rel="icon" href="../../assets/logo/mark-instep-sm.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.44">
+    
+    
+      
+        <title>Apex bundle - AlgoBridge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.0253249f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wdth,wght@0,75..125,200..900&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,750&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+
+    
+      <link rel="stylesheet" href="../../assets/css/tokens.css">
+    
+      <link rel="stylesheet" href="../../assets/css/algobridge.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#install-the-apex-bundle" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      <header class="md-header ab-top" data-md-component="header">
+  <nav class="md-header__inner ab-top__inner" aria-label="Header">
+    <label class="md-header__button md-icon ab-top__menu" for="__drawer" aria-label="Menu">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <a href="../.." class="ab-brand" aria-label="AlgoBridge home" data-md-component="logo">
+      <svg class="ab-mark ab-mark--live" width="38" height="24" viewBox="0 0 32 20" aria-hidden="true">
+        <defs>
+          <mask id="ab-top-sf" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="20"><rect width="32" height="20" fill="#fff"/><circle cx="7" cy="10" r="1.5" fill="#000"/><g class="spk" style="transform-origin:7px 10px"><rect x="6.1" y="4.2" width="1.8" height="2.6" fill="#000" transform="rotate(45 7 10)"/></g></mask>
+          <mask id="ab-top-pg" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="20"><rect width="32" height="20" fill="#fff"/><circle cx="25" cy="10" r="1.5" fill="#000"/><g class="spk" style="transform-origin:25px 10px"><rect x="24.1" y="4.2" width="1.8" height="2.6" fill="#000" transform="rotate(45 25 10)"/></g></mask>
+        </defs>
+        <path class="belt" pathLength="100" stroke-linecap="square" stroke-width="2" d="M7 3H25A7 7 0 0 1 25 17H7A7 7 0 0 1 7 3Z"/>
+        <circle class="pul c-sf" cx="7" cy="10" r="5.3" mask="url(#ab-top-sf)"/>
+        <circle class="pul b c-pg" cx="25" cy="10" r="5.3" mask="url(#ab-top-pg)"/>
+        <rect class="pk c-sf" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M8.5 3H23.5" dur="2.4s" begin="1.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="1.3s" repeatCount="indefinite"/></rect>
+        <rect class="pk c-sf" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M8.5 3H23.5" dur="2.4s" begin="2.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="2.5s" repeatCount="indefinite"/></rect>
+        <rect class="pk c-pg" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M23.5 17H8.5" dur="2.4s" begin="1.9s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="1.9s" repeatCount="indefinite"/></rect>
+        <rect class="pk c-pg" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M23.5 17H8.5" dur="2.4s" begin="3.1s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="3.1s" repeatCount="indefinite"/></rect>
+      </svg>
+      <span class="ab-brand__word"><span class="ab-brand__algo">Algo</span><span class="ab-brand__bridge">Bridge</span></span>
+    </a>
+    <div class="ab-top__nav" aria-label="Sections">
+        <a href="../../getting-started/">Getting started</a>
+        <a href="../" aria-current="page">Guides</a>
+        <a href="../../concepts/">Concepts</a>
+        <a href="../../pricing/">Pricing</a>
+        <a href="../../release-notes/">Release notes</a>
+        <a href="https://github.com/cloudalgo/algobridge-v2">GitHub</a>
+    </div>
+    <div class="ab-top__right">
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+      <a class="ab-btn ab-btn--primary ab-top__cta" href="../../getting-started/install/">Install</a>
+    </div>
+  </nav>
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AlgoBridge" class="md-nav__button md-logo" aria-label="AlgoBridge" data-md-component="logo">
+      
+  <img src="../../assets/logo/mark-instep.svg" alt="logo">
+
+    </a>
+    AlgoBridge
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Getting started
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/install/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Install
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-sync/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Your first sync
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../salesforce-connection/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Salesforce connection
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-database/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Client database
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../change-sources/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Change sources
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Apex bundle
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Apex bundle
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-bundle-contains" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the bundle contains
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#before-you-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Before you start
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-deploy-the-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Deploy the bundle
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-assign-the-permission-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Assign the permission set
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Verify
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pair-the-change-notifier" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pair the change notifier
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-the-flows" class="md-nav__link">
+    <span class="md-ellipsis">
+      Add the Flows
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#select-the-change-notifier" class="md-nav__link">
+    <span class="md-ellipsis">
+      Select the change notifier
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotate-or-revoke-the-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rotate or revoke the key
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#know-the-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Know the limits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#remove-the-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remove the bundle
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+
+  <aside class="ab-help-card" aria-label="Consulting">
+    <p class="ab-help-card__title">Need a hand?</p>
+    <p>Switching from another sync tool? CloudAlgo plans the move and reviews your mappings before you go live.</p>
+    <a class="ab-btn ab-btn--secondary" href="https://cloudalgo.com/#schedule">Book a consultation</a>
+  </aside>
+
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mappings/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mappings
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sso/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Single sign-on
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../users-and-roles/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Users and roles
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../live-log/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Live log
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workers-and-jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Workers and jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../concepts/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/salesforce-to-postgres/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Salesforce to PostgreSQL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/postgres-to-salesforce/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PostgreSQL to Salesforce
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/change-notifier/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    The change notifier
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/api-budget/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API budget
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/conflicts/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Conflicts
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/security/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Security
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pricing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Pricing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-bundle-contains" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the bundle contains
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#before-you-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Before you start
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-deploy-the-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Deploy the bundle
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-assign-the-permission-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Assign the permission set
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Verify
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pair-the-change-notifier" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pair the change notifier
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-the-flows" class="md-nav__link">
+    <span class="md-ellipsis">
+      Add the Flows
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#select-the-change-notifier" class="md-nav__link">
+    <span class="md-ellipsis">
+      Select the change notifier
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotate-or-revoke-the-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rotate or revoke the key
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#know-the-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Know the limits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#remove-the-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remove the bundle
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+
+  <aside class="ab-help-card" aria-label="Consulting">
+    <p class="ab-help-card__title">Need a hand?</p>
+    <p>Switching from another sync tool? CloudAlgo plans the move and reviews your mappings before you go live.</p>
+    <a class="ab-btn ab-btn--secondary" href="https://cloudalgo.com/#schedule">Book a consultation</a>
+  </aside>
+
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+  
+                  
+
+
+<h1 id="install-the-apex-bundle">Install the Apex bundle<a class="headerlink" href="#install-the-apex-bundle" title="Permanent link">&para;</a></h1>
+<p>This guide installs the AlgoBridge Apex bundle in your org, which the Apex probe and the change notifier need. It then pairs the change notifier, adds the Flows that drive it, and checks that it works.</p>
+<p>For how the notifier signs and checks each request, see <a href="../../concepts/change-notifier/">How the change notifier works</a>.</p>
+<h2 id="what-the-bundle-contains">What the bundle contains<a class="headerlink" href="#what-the-bundle-contains" title="Permanent link">&para;</a></h2>
+<p>The bundle is plain metadata, not a managed package, so you can read every line before you deploy it. Its source is in <code>packages/salesforce/apex</code> in the repository.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>algobridge_ChangeProbe</code></td>
+<td>The Apex probe. Read-only: reports, for up to 90 objects, whether each one changed.</td>
+</tr>
+<tr>
+<td><code>algobridge_Status</code></td>
+<td>Reports the bundle version and which features are enabled.</td>
+</tr>
+<tr>
+<td><code>algobridge_NotifierPair</code></td>
+<td>Receives the one-time pairing from AlgoBridge.</td>
+</tr>
+<tr>
+<td><code>algobridge_NotifyChange</code></td>
+<td>The Flow action <strong>AlgoBridge: Notify Change</strong>.</td>
+</tr>
+<tr>
+<td><code>algobridge_Notifier</code></td>
+<td>Sends the signed notification to AlgoBridge.</td>
+</tr>
+<tr>
+<td><code>algobridge_Notifier__c</code></td>
+<td>Hierarchy custom setting that holds the notifier key.</td>
+</tr>
+<tr>
+<td><code>algobridge_Instance</code></td>
+<td>Remote site setting for your AlgoBridge address.</td>
+</tr>
+<tr>
+<td><code>algobridge_Integration</code></td>
+<td>Permission set <strong>AlgoBridge Integration</strong>.</td>
+</tr>
+<tr>
+<td>Five test classes</td>
+<td>One per class above.</td>
+</tr>
+</tbody>
+</table>
+<p>The bundle is version 1.1.0. A bundle older than 1.1.0 has no notifier, and the console disables <strong>Pair notifier</strong> until you deploy again.</p>
+<h2 id="before-you-start">Before you start<a class="headerlink" href="#before-you-start" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../salesforce-connection/">Salesforce is connected</a>.</li>
+<li>The integration user has <strong>Modify All Data</strong>, or <strong>Modify Metadata Through Metadata API Functions</strong>, and <strong>Author Apex</strong>. These are needed to deploy from the console.</li>
+<li>For the change notifier: <code>PUBLIC_URL</code> is an <code>https://</code> address that Salesforce can reach.</li>
+</ul>
+<h2 id="step-1-deploy-the-bundle">Step 1: Deploy the bundle<a class="headerlink" href="#step-1-deploy-the-bundle" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">From the console</label><label for="__tabbed_1_2">With the Salesforce CLI</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<ol>
+<li>Open <strong>Instance → Connections → Change detection</strong>.</li>
+<li>Click <strong>Deploy bundle</strong>.</li>
+</ol>
+<p>The deploy runs in the background and the panel shows <strong>Deploying…</strong>, then <strong>Deploy succeeded</strong> or <strong>Deploy failed</strong>. It runs only the bundle's five test classes, and it writes the origin of your <code>PUBLIC_URL</code> into the remote site setting for you.</p>
+<p>It costs one Metadata API deploy, its status polls, and one status call.</p>
+</div>
+<div class="tabbed-block">
+<ol>
+<li>Edit the remote site setting in <code>force-app</code> so its URL is your <code>PUBLIC_URL</code> origin. It ships as the placeholder <code>https://instance.invalid</code>. Don't commit your edit. You can also change it after the deploy in <strong>Setup → Remote Site Settings</strong>.</li>
+<li>
+<p>Deploy, running only the bundle's tests:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">cd</span><span class="w"> </span>packages/salesforce/apex
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>sf<span class="w"> </span>project<span class="w"> </span>deploy<span class="w"> </span>start<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--source-dir<span class="w"> </span>force-app<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--target-org<span class="w"> </span>&lt;your-org-alias&gt;<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--test-level<span class="w"> </span>RunSpecifiedTests<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--tests<span class="w"> </span>algobridge_ChangeProbe_Test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>--tests<span class="w"> </span>algobridge_Status_Test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>--tests<span class="w"> </span>algobridge_NotifyChange_Test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span>--tests<span class="w"> </span>algobridge_Notifier_Test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span>--tests<span class="w"> </span>algobridge_NotifierPair_Test
+</code></pre></div>
+</li>
+</ol>
+</div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If <code>PUBLIC_URL</code> changes later, deploy the bundle again and pair the notifier again, so the remote site and the key match the new address.</p>
+</div>
+<h2 id="step-2-assign-the-permission-set">Step 2: Assign the permission set<a class="headerlink" href="#step-2-assign-the-permission-set" title="Permanent link">&para;</a></h2>
+<p>The deploy doesn't assign the permission set.</p>
+<ol>
+<li>In Salesforce, open <strong>Setup → Permission Sets → AlgoBridge Integration</strong>.</li>
+<li>Click <strong>Manage Assignments</strong> and assign it to the integration user only.</li>
+</ol>
+<p>The probe runs with sharing, in user mode, so it sees only what the integration user can read.</p>
+<h2 id="step-3-verify">Step 3: Verify<a class="headerlink" href="#step-3-verify" title="Permanent link">&para;</a></h2>
+<p>To use the Apex probe, click <strong>Use this source</strong> on the <strong>Apex probe</strong> card. AlgoBridge makes one status call and saves the source only if the bundle reports the expected version with the probe enabled. The card then shows <strong>Verified</strong> and the time.</p>
+<p>If you only want the Apex probe, you're done. Continue to pair the change notifier.</p>
+<h2 id="pair-the-change-notifier">Pair the change notifier<a class="headerlink" href="#pair-the-change-notifier" title="Permanent link">&para;</a></h2>
+<p>Pairing gives the org a key it uses to sign notifications, and gives AlgoBridge a way to check them.</p>
+<ol>
+<li>Confirm the bundle is 1.1.0 with the remote site set to your <code>PUBLIC_URL</code>, and that the permission set is assigned.</li>
+<li>On the <strong>Change notifier</strong> card, click <strong>Pair notifier</strong>.</li>
+</ol>
+<p>AlgoBridge sends the org a single-use code that expires in 10 minutes and is never shown. Salesforce calls AlgoBridge back once to collect the key. This costs two API requests, the pairing and a status check. You see <em>Notifier paired.</em> and the card shows <strong>Paired, key abk_…, no notification yet</strong>.</p>
+<h2 id="add-the-flows">Add the Flows<a class="headerlink" href="#add-the-flows" title="Permanent link">&para;</a></h2>
+<p>The notifier is driven by two record-triggered Flows on each synced object. Add them by hand for every object you map.</p>
+<p><strong>Flow 1: saves</strong></p>
+<ol>
+<li>In <strong>Setup → Flows</strong>, create a <strong>Record-Triggered Flow</strong> on the object.</li>
+<li>Trigger it when <strong>A record is created or updated</strong>, with no entry conditions.</li>
+<li>Optimize it for <strong>Actions and Related Records</strong>.</li>
+<li>Add an <strong>Action</strong> and pick <strong>AlgoBridge: Notify Change</strong> (category <strong>AlgoBridge</strong>).</li>
+<li>Set its input <code>records</code> to <code>{!$Record}</code>.</li>
+<li>Save it with the label <code>AlgoBridge notify &lt;Object&gt; save</code> and the API name <code>algobridge_notify_&lt;Object&gt;_save</code>.</li>
+<li>Activate it.</li>
+</ol>
+<p><strong>Flow 2: deletes</strong></p>
+<p>Repeat the steps with the trigger <strong>A record is deleted</strong>, the label <code>AlgoBridge notify &lt;Object&gt; delete</code> and the API name <code>algobridge_notify_&lt;Object&gt;_delete</code>.</p>
+<div class="admonition tip">
+<p class="admonition-title">API names for custom objects</p>
+<p>Flow API names can't contain a double underscore, so write <code>Invoice__c</code> as <code>Invoice_c</code>: <code>algobridge_notify_Invoice_c_save</code>.</p>
+</div>
+<p>A Flow on an object you don't sync is harmless: AlgoBridge ignores the notification. Object names match regardless of case.</p>
+<h2 id="select-the-change-notifier">Select the change notifier<a class="headerlink" href="#select-the-change-notifier" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Click <strong>Use this source</strong> on the <strong>Change notifier</strong> card.</li>
+<li>AlgoBridge checks the notifier is installed and paired, that <code>PUBLIC_URL</code> uses <code>https</code>, and that it holds a live key.</li>
+<li>Save a record on a synced object in Salesforce. The card's <strong>last notification</strong> time updates and the change arrives in PostgreSQL.</li>
+</ol>
+<p>You can watch <code>notifier_notification_accepted</code> events in the <a href="../live-log/">Live log</a>.</p>
+<h2 id="rotate-or-revoke-the-key">Rotate or revoke the key<a class="headerlink" href="#rotate-or-revoke-the-key" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Rotate key</strong> issues a new key for two API requests. The old key keeps working for 24 hours, so in-flight notifications aren't lost. Rotate on a schedule.</li>
+<li><strong>Revoke</strong> deletes every key, with no API request. Salesforce keeps sending, and each send is refused until you pair again. Sync falls back to polling. Repeated refusals open the <code>notifier_auth_failures</code> alert.</li>
+</ul>
+<div class="admonition danger">
+<p class="admonition-title">If a key may have leaked</p>
+<p>Click <strong>Revoke</strong>, then <strong>Pair notifier</strong>. Don't use <strong>Rotate key</strong>: it keeps the old key working for 24 hours.</p>
+</div>
+<p>Disconnecting Salesforce deletes the keys, so pair again after you connect. A reconnect to the same org keeps them.</p>
+<h2 id="know-the-limits">Know the limits<a class="headerlink" href="#know-the-limits" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Saves by the integration user aren't notified. If you reconnect as a different user, pair again.</li>
+<li>Undelete, merge, cascade delete and deactivated Flows send nothing. The hourly fallback poll and the daily reconciliation sweep catch these.</li>
+<li>Nothing is sent from batch or future contexts.</li>
+<li>Each notification is one asynchronous Apex call, from the org's daily allowance and from the transaction's limit of 50 future calls, which your own code shares. The action skips sending when less than 1% of the daily allowance is left.</li>
+<li>Sends are fire and forget with a 10 second timeout. A missed send is caught by the fallback poll.</li>
+</ul>
+<h2 id="remove-the-bundle">Remove the bundle<a class="headerlink" href="#remove-the-bundle" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Deactivate and delete the AlgoBridge Flows.</li>
+<li>Click <strong>Revoke</strong> on the <strong>Change notifier</strong> card.</li>
+<li>Switch the change source to <strong>Composite polling</strong>.</li>
+<li>In Salesforce, delete the bundle's classes, the custom setting, the remote site setting and the permission set.</li>
+</ol>
+<p>If you skip step 3, the daily check marks the source unavailable and polling falls back to Composite.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<details class="failure">
+<summary>Deploy failed</summary>
+<p>The panel shows the deploy error. The usual causes are a missing Author Apex or Modify Metadata permission on the integration user, or a failing test in the org. Fix the cause and click <strong>Deploy bundle</strong> again.</p>
+</details>
+<details class="failure">
+<summary>A bundle deploy is already running.</summary>
+<p>A deploy is in progress. Wait for it to finish.</p>
+</details>
+<details class="failure">
+<summary>The Apex bundle in the org has no notifier.</summary>
+<p>The org has a bundle older than 1.1.0. Deploy the bundle, then pair again.</p>
+</details>
+<details class="failure">
+<summary>Salesforce refused the pairing.</summary>
+<p>The <strong>AlgoBridge Integration</strong> permission set isn't assigned to the integration user, or the remote site setting doesn't cover your <code>PUBLIC_URL</code>. Pairing is also limited to 5 attempts a minute: if you hit the limit, wait a minute. Nothing changed, so fix the cause and pair again.</p>
+</details>
+<details class="failure">
+<summary>Notifier paired, but the follow-up status check found a problem.</summary>
+<p>The pairing worked but the status call found an issue. The <strong>Change notifier</strong> card shows it once the notifier is the selected source, and selecting it checks again.</p>
+</details>
+<details class="failure">
+<summary>Notifications stop arriving</summary>
+<p>Check that the Flows are active, that <code>PUBLIC_URL</code> and the remote site still match, and look for <code>notifier_notification_rejected</code> in the <a href="../live-log/">Live log</a>. If the log reports <code>notifier_key_unreadable</code>, pair again.</p>
+</details>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../../concepts/change-notifier/">How the change notifier works</a></li>
+<li><a href="../mappings/">Create mappings</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+  
+  
+    <nav class="ab-pager" aria-label="Footer">
+      
+        <a href="../change-sources/" class="ab-pager__link ab-pager__link--prev" rel="prev">
+          <svg class="ab-pager__icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+          <span class="ab-pager__text"><small>Previous</small><span>Change sources</span></span>
+        </a>
+      
+      
+        <a href="../mappings/" class="ab-pager__link ab-pager__link--next" rel="next">
+          <span class="ab-pager__text"><small>Next</small><span>Mappings</span></span>
+          <svg class="ab-pager__icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+        </a>
+      
+    </nav>
+  
+
+
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+  <footer class="ab-foot">
+    <section class="ab-help" aria-labelledby="ab-help-title">
+      <div class="ab-help__text">
+        <h2 id="ab-help-title">Want help running AlgoBridge?</h2>
+        <p>CloudAlgo builds AlgoBridge. We help teams move from their current sync tool, review mappings and schemas, and keep production sync running with response-time commitments.</p>
+      </div>
+      <div class="ab-help__acts">
+        <a class="ab-btn ab-btn--primary" href="https://cloudalgo.com/#schedule">Book a consultation</a>
+        <a class="ab-btn ab-btn--secondary" href="https://cloudalgo.com/">Visit cloudalgo.com</a>
+      </div>
+    </section>
+  
+  <div class="ab-foot__inner">
+    <div class="ab-foot__about">
+      <a class="ab-brand" href="../..">
+        <svg class="ab-mark" width="32" height="20" viewBox="0 0 32 20" aria-hidden="true">
+          <path class="belt" stroke-width="2.4" d="M7 3H25A7 7 0 0 1 25 17H7A7 7 0 0 1 7 3Z"/>
+          <circle class="c-sf" cx="7" cy="10" r="4.6"/>
+          <circle class="c-pg" cx="25" cy="10" r="4.6"/>
+        </svg>
+        <span class="ab-brand__word"><span class="ab-brand__algo">Algo</span><span class="ab-brand__bridge">Bridge</span></span>
+      </a>
+      <p>Two-way sync between one Salesforce org and one PostgreSQL database. Self-hosted, open source, and careful with your org's API limits.</p>
+    </div>
+    <nav class="ab-foot__col" aria-label="Documentation">
+      <h2>Docs</h2>
+      <a href="../../getting-started/install/">Install</a>
+      <a href="../../getting-started/first-sync/">Your first sync</a>
+      <a href="../">Guides</a>
+      <a href="../../concepts/">Concepts</a>
+    </nav>
+    <nav class="ab-foot__col" aria-label="Project">
+      <h2>Project</h2>
+      <a href="../../release-notes/">Release notes</a>
+      <a href="../../pricing/">Pricing and support</a>
+      <a href="../../faq/">FAQ</a>
+        <a href="https://github.com/cloudalgo/algobridge-v2">GitHub</a>
+    </nav>
+  </div>
+  <div class="ab-foot__base">
+    <span>AlgoBridge, a CloudAlgo project</span>
+      <a href="https://cloudalgo.com">cloudalgo.com</a>
+  </div>
+</footer>
+
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "content.code.copy", "content.tabs.link", "search.highlight"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.83f73b43.min.js"></script>
+      
+        <script src="../../assets/js/diagrams.js"></script>
+      
+    
+  </body>
+</html>

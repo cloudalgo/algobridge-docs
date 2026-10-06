@@ -1,0 +1,1471 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Two-way sync between one Salesforce org and one PostgreSQL database. Self-hosted, open source, and careful with your org's API limits.">
+      
+      
+      
+        <link rel="canonical" href="https://bridge.cloudalgo.com/guides/sso/">
+      
+      
+        <link rel="prev" href="../mappings/">
+      
+      
+        <link rel="next" href="../users-and-roles/">
+      
+      
+      <link rel="icon" href="../../assets/logo/mark-instep-sm.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.44">
+    
+    
+      
+        <title>Single sign-on - AlgoBridge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.0253249f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wdth,wght@0,75..125,200..900&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,750&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+
+    
+      <link rel="stylesheet" href="../../assets/css/tokens.css">
+    
+      <link rel="stylesheet" href="../../assets/css/algobridge.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#set-up-sign-in" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      <header class="md-header ab-top" data-md-component="header">
+  <nav class="md-header__inner ab-top__inner" aria-label="Header">
+    <label class="md-header__button md-icon ab-top__menu" for="__drawer" aria-label="Menu">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <a href="../.." class="ab-brand" aria-label="AlgoBridge home" data-md-component="logo">
+      <svg class="ab-mark ab-mark--live" width="38" height="24" viewBox="0 0 32 20" aria-hidden="true">
+        <defs>
+          <mask id="ab-top-sf" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="20"><rect width="32" height="20" fill="#fff"/><circle cx="7" cy="10" r="1.5" fill="#000"/><g class="spk" style="transform-origin:7px 10px"><rect x="6.1" y="4.2" width="1.8" height="2.6" fill="#000" transform="rotate(45 7 10)"/></g></mask>
+          <mask id="ab-top-pg" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="20"><rect width="32" height="20" fill="#fff"/><circle cx="25" cy="10" r="1.5" fill="#000"/><g class="spk" style="transform-origin:25px 10px"><rect x="24.1" y="4.2" width="1.8" height="2.6" fill="#000" transform="rotate(45 25 10)"/></g></mask>
+        </defs>
+        <path class="belt" pathLength="100" stroke-linecap="square" stroke-width="2" d="M7 3H25A7 7 0 0 1 25 17H7A7 7 0 0 1 7 3Z"/>
+        <circle class="pul c-sf" cx="7" cy="10" r="5.3" mask="url(#ab-top-sf)"/>
+        <circle class="pul b c-pg" cx="25" cy="10" r="5.3" mask="url(#ab-top-pg)"/>
+        <rect class="pk c-sf" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M8.5 3H23.5" dur="2.4s" begin="1.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="1.3s" repeatCount="indefinite"/></rect>
+        <rect class="pk c-sf" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M8.5 3H23.5" dur="2.4s" begin="2.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="2.5s" repeatCount="indefinite"/></rect>
+        <rect class="pk c-pg" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M23.5 17H8.5" dur="2.4s" begin="1.9s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="1.9s" repeatCount="indefinite"/></rect>
+        <rect class="pk c-pg" x="-1.6" y="-1.5" width="3.2" height="3" rx=".4" opacity="0"><animateMotion path="M23.5 17H8.5" dur="2.4s" begin="3.1s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.4s" begin="3.1s" repeatCount="indefinite"/></rect>
+      </svg>
+      <span class="ab-brand__word"><span class="ab-brand__algo">Algo</span><span class="ab-brand__bridge">Bridge</span></span>
+    </a>
+    <div class="ab-top__nav" aria-label="Sections">
+        <a href="../../getting-started/">Getting started</a>
+        <a href="../" aria-current="page">Guides</a>
+        <a href="../../concepts/">Concepts</a>
+        <a href="../../pricing/">Pricing</a>
+        <a href="../../release-notes/">Release notes</a>
+        <a href="https://github.com/cloudalgo/algobridge-v2">GitHub</a>
+    </div>
+    <div class="ab-top__right">
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+      <a class="ab-btn ab-btn--primary ab-top__cta" href="../../getting-started/install/">Install</a>
+    </div>
+  </nav>
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AlgoBridge" class="md-nav__button md-logo" aria-label="AlgoBridge" data-md-component="logo">
+      
+  <img src="../../assets/logo/mark-instep.svg" alt="logo">
+
+    </a>
+    AlgoBridge
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Getting started
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/install/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Install
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-sync/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Your first sync
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../salesforce-connection/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Salesforce connection
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-database/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Client database
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../change-sources/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Change sources
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apex-bundle/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Apex bundle
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mappings/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mappings
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Single sign-on
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Single sign-on
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#before-you-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Before you start
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-settings-fit-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      How the settings fit together
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-passwords-and-two-step-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local passwords and two-step verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-a-single-sign-on-provider" class="md-nav__link">
+    <span class="md-ellipsis">
+      Add a single sign-on provider
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limit-password-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limit password sign-in
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-accounts-are-matched" class="md-nav__link">
+    <span class="md-ellipsis">
+      How accounts are matched
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+
+  <aside class="ab-help-card" aria-label="Consulting">
+    <p class="ab-help-card__title">Need a hand?</p>
+    <p>Switching from another sync tool? CloudAlgo plans the move and reviews your mappings before you go live.</p>
+    <a class="ab-btn ab-btn--secondary" href="https://cloudalgo.com/#schedule">Book a consultation</a>
+  </aside>
+
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../users-and-roles/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Users and roles
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../live-log/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Live log
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workers-and-jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Workers and jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../concepts/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/salesforce-to-postgres/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Salesforce to PostgreSQL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/postgres-to-salesforce/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PostgreSQL to Salesforce
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/change-notifier/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    The change notifier
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/api-budget/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API budget
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/conflicts/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Conflicts
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/security/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Security
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pricing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Pricing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-notes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Release notes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#before-you-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Before you start
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-settings-fit-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      How the settings fit together
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-passwords-and-two-step-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local passwords and two-step verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-a-single-sign-on-provider" class="md-nav__link">
+    <span class="md-ellipsis">
+      Add a single sign-on provider
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limit-password-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limit password sign-in
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-accounts-are-matched" class="md-nav__link">
+    <span class="md-ellipsis">
+      How accounts are matched
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+
+  <aside class="ab-help-card" aria-label="Consulting">
+    <p class="ab-help-card__title">Need a hand?</p>
+    <p>Switching from another sync tool? CloudAlgo plans the move and reviews your mappings before you go live.</p>
+    <a class="ab-btn ab-btn--secondary" href="https://cloudalgo.com/#schedule">Book a consultation</a>
+  </aside>
+
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+  
+                  
+
+
+<h1 id="set-up-sign-in">Set up sign-in<a class="headerlink" href="#set-up-sign-in" title="Permanent link">&para;</a></h1>
+<p>This guide sets up how people sign in to the console: AlgoBridge passwords with optional two-step verification, single sign-on through Google Workspace, Microsoft Entra ID, or any standard OpenID Connect provider, or a mix of them.</p>
+<p>Sign-in is configured with environment variables, so each change needs a restart.</p>
+<h2 id="before-you-start">Before you start<a class="headerlink" href="#before-you-start" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><code>PUBLIC_URL</code> is set</strong> to the address people use, for example <code>https://sync.example.com</code>. Redirect URIs are built from it.</li>
+<li><strong>At least one admin exists.</strong> See <a href="../users-and-roles/#create-the-first-admin">Create the first admin</a>.</li>
+<li>For SSO: admin access to your identity provider, so you can register an application.</li>
+</ul>
+<h2 id="how-the-settings-fit-together">How the settings fit together<a class="headerlink" href="#how-the-settings-fit-together" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AUTH_PROVIDERS</code></td>
+<td>Comma-separated list of sign-in methods: <code>local</code>, <code>google</code>, <code>microsoft</code>, <code>oidc</code>. For example <code>local,google</code>. Each SSO provider listed gets its own button.</td>
+</tr>
+<tr>
+<td><code>AUTH_LOCAL_LOGIN</code></td>
+<td>Who may sign in with an AlgoBridge password: <code>all</code> (the default), <code>admins</code> or <code>off</code>.</td>
+</tr>
+<tr>
+<td><code>AUTH_ALLOWED_DOMAINS</code></td>
+<td>Optional. Email domains allowed to sign up on their first SSO sign-in, without an invite.</td>
+</tr>
+</tbody>
+</table>
+<p>Rules that AlgoBridge checks at startup:</p>
+<ul>
+<li><code>local</code> must be in <code>AUTH_PROVIDERS</code> unless <code>AUTH_LOCAL_LOGIN=off</code>.</li>
+<li><code>AUTH_LOCAL_LOGIN=off</code> needs at least one SSO provider.</li>
+<li>Each SSO provider's variables are required together. A deployment missing any of them refuses to start, so a half-configured provider can't go live.</li>
+</ul>
+<h2 id="local-passwords-and-two-step-verification">Local passwords and two-step verification<a class="headerlink" href="#local-passwords-and-two-step-verification" title="Permanent link">&para;</a></h2>
+<p>Local sign-in is on by default. Passwords are hashed with argon2id. There is no self-service "forgot password": an admin issues a set-password link from the <strong>Users</strong> page.</p>
+<p>Two-step verification is optional and applies to local passwords only. It needs <code>ENCRYPTION_KEY</code> set, because the authenticator key is stored encrypted. Each person turns it on for themselves:</p>
+<ol>
+<li>Click your name at the top of the console to open <strong>Account</strong>.</li>
+<li>Under <strong>Two-step verification</strong>, click <strong>Set up</strong>.</li>
+<li>Scan the QR code with an authenticator app, or enter the key by hand. The key is shown once.</li>
+<li>Enter the 6-digit code the app shows and click <strong>Turn on</strong>.</li>
+</ol>
+<p>From then on, signing in asks for a code after the password. If someone loses their authenticator, an admin can turn two-step verification off for them on the <strong>Users</strong> page.</p>
+<h2 id="add-a-single-sign-on-provider">Add a single sign-on provider<a class="headerlink" href="#add-a-single-sign-on-provider" title="Permanent link">&para;</a></h2>
+<p>The redirect URI for each provider is <code>PUBLIC_URL</code> followed by <code>/auth/callback/&lt;provider&gt;</code>. It must match exactly.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Google</label><label for="__tabbed_1_2">Microsoft</label><label for="__tabbed_1_3">Generic OIDC</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>Google sign-in accepts accounts from one Google Workspace domain.</p>
+<ol>
+<li>In the Google Cloud console, open <strong>APIs &amp; Services → OAuth consent screen</strong> and set <strong>User type</strong> to <strong>Internal</strong>. This limits sign-in to your Workspace organization before AlgoBridge sees a login.</li>
+<li>Open <strong>APIs &amp; Services → Credentials → Create credentials → OAuth client ID</strong>.</li>
+<li>Choose <strong>Application type: Web application</strong>.</li>
+<li>
+<p>Under <strong>Authorized redirect URIs</strong>, add:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>https://sync.example.com/auth/callback/google
+</code></pre></div>
+</li>
+<li>
+<p>Save, and copy the <strong>Client ID</strong> and <strong>Client secret</strong>.</p>
+</li>
+<li>
+<p>Set these variables and restart:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">AUTH_PROVIDERS</span><span class="o">=</span>local,google
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">GOOGLE_CLIENT_ID</span><span class="o">=</span>change-me
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">GOOGLE_CLIENT_SECRET</span><span class="o">=</span>change-me
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nv">GOOGLE_HOSTED_DOMAIN</span><span class="o">=</span>example.com
+</code></pre></div>
+</li>
+</ol>
+<p>AlgoBridge checks Google's hosted-domain (<code>hd</code>) claim on every sign-in and accepts only <code>GOOGLE_HOSTED_DOMAIN</code>. Personal Gmail accounts never carry it, so they're always refused.</p>
+</div>
+<div class="tabbed-block">
+<p>Microsoft sign-in accepts accounts from one Entra ID tenant.</p>
+<ol>
+<li>In the Entra admin center, open <strong>Identity → Applications → App registrations → New registration</strong>.</li>
+<li>Choose <strong>Accounts in this organizational directory only (Single tenant)</strong>.</li>
+<li>
+<p>Under <strong>Redirect URI</strong>, choose platform <strong>Web</strong> and enter:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>https://sync.example.com/auth/callback/microsoft
+</code></pre></div>
+</li>
+<li>
+<p>Open <strong>Certificates &amp; secrets → New client secret</strong>. Copy the value, which is shown once, and note its expiry date. Rotate it before it expires, or sign-in stops working.</p>
+</li>
+<li>From the app's <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> and the <strong>Directory (tenant) ID</strong>.</li>
+<li>Open <strong>Token configuration → Add optional claim</strong>, choose token type <strong>ID</strong>, and add <code>email</code> and <code>xms_edov</code>.</li>
+<li>
+<p>Set these variables and restart:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">AUTH_PROVIDERS</span><span class="o">=</span>local,microsoft
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">MICROSOFT_CLIENT_ID</span><span class="o">=</span>change-me
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">MICROSOFT_CLIENT_SECRET</span><span class="o">=</span>change-me
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="nv">MICROSOFT_TENANT_ID</span><span class="o">=</span><span class="m">00000000</span>-0000-0000-0000-000000000000
+</code></pre></div>
+</li>
+</ol>
+<p><code>MICROSOFT_TENANT_ID</code> must be your tenant's GUID. <code>common</code>, <code>organizations</code> and <code>consumers</code> are refused at startup, because they would admit accounts from any tenant.</p>
+<div class="admonition warning">
+<p class="admonition-title">Don't skip the optional claims</p>
+<p>Entra's <code>email</code> claim alone isn't guaranteed to be verified. AlgoBridge trusts it only with <code>xms_edov: true</code>. Without both claims, an invited user's first Microsoft sign-in is refused, because there is no verified email to match the invite.</p>
+</div>
+</div>
+<div class="tabbed-block">
+<p>Use this for Okta, Keycloak, Auth0 or any other standard OpenID Connect provider. The provider must support:</p>
+<ul>
+<li>discovery at <code>&lt;issuer&gt;/.well-known/openid-configuration</code>,</li>
+<li>the authorization code flow with PKCE (S256),</li>
+<li>
+<p>ID tokens with <code>email</code> and <code>email_verified</code>, where <code>email_verified</code> is the boolean <code>true</code>. A string <code>"true"</code> counts as unverified.</p>
+</li>
+<li>
+<p>In your provider, create an OIDC web application and register this redirect URI:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>https://sync.example.com/auth/callback/oidc
+</code></pre></div>
+</li>
+<li>
+<p>Note the issuer URL, client ID and client secret. Typical issuer URLs:</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Issuer URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Okta</td>
+<td><code>https://example.okta.com/oauth2/default</code></td>
+</tr>
+<tr>
+<td>Keycloak</td>
+<td><code>https://&lt;keycloak-host&gt;/realms/&lt;realm-name&gt;</code></td>
+</tr>
+<tr>
+<td>Auth0</td>
+<td><code>https://&lt;your-tenant&gt;.auth0.com/</code></td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>Set these variables and restart:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">AUTH_PROVIDERS</span><span class="o">=</span>local,oidc
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://example.okta.com/oauth2/default
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>change-me
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>change-me
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nv">OIDC_DISPLAY_NAME</span><span class="o">=</span>Okta
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nv">OIDC_ALLOWED_EMAIL_DOMAINS</span><span class="o">=</span>example.com
+</code></pre></div>
+</li>
+</ul>
+<p><code>OIDC_ISSUER</code> must use <code>https</code>. The button reads <strong>Continue with</strong> followed by <code>OIDC_DISPLAY_NAME</code>.</p>
+<p>Set <code>OIDC_ALLOWED_EMAIL_DOMAINS</code> to the domains you control. A generic provider might assert a verified email for a domain it doesn't own, and this list limits which emails can link to an account or sign up. Matching is exact: a subdomain isn't covered.</p>
+</div>
+</div>
+</div>
+<p>You can list several providers at once, for example <code>AUTH_PROVIDERS=local,google,oidc</code>. The sign-in page shows one button per provider.</p>
+<h2 id="limit-password-sign-in">Limit password sign-in<a class="headerlink" href="#limit-password-sign-in" title="Permanent link">&para;</a></h2>
+<p>Once SSO works, set:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">AUTH_LOCAL_LOGIN</span><span class="o">=</span>admins
+</code></pre></div>
+<p>This is the recommended setting with SSO. Only admins can still sign in with a password, as a break-glass path. Everyone else uses the provider button. A non-admin's correct password is refused.</p>
+<p><code>AUTH_LOCAL_LOGIN=off</code> removes the password form entirely.</p>
+<p>The <code>create-admin</code> command and admin-issued set-password links keep working in every mode, including <code>off</code>.</p>
+<h2 id="how-accounts-are-matched">How accounts are matched<a class="headerlink" href="#how-accounts-are-matched" title="Permanent link">&para;</a></h2>
+<p>People sign in through SSO with an account that already exists in AlgoBridge:</p>
+<ul>
+<li><strong>Invited users</strong> are matched by verified email on their first SSO sign-in. Invite them on the <strong>Users</strong> page first.</li>
+<li><strong>Existing password accounts</strong> with the same verified email are linked on the first SSO sign-in from that provider, including accounts with two-step verification on. After that, the account accepts either way of signing in. SSO sign-ins never ask for a two-step code: the provider's own sign-in security stands in for it.</li>
+<li><strong>Just-in-time sign-up</strong>: if the person has no account and their email domain is in <code>AUTH_ALLOWED_DOMAINS</code>, AlgoBridge creates one with the <strong>viewer</strong> role.</li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>If you have password accounts you don't want linked to SSO, disable or rename them before you turn a provider on.</p>
+</div>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<p>These notices appear on the sign-in page.</p>
+<details class="failure">
+<summary>That account is not part of the organization this console accepts.</summary>
+<p>Google: the <code>hd</code> claim was missing or didn't match <code>GOOGLE_HOSTED_DOMAIN</code>, usually a personal account. Microsoft: the token's tenant didn't match <code>MICROSOFT_TENANT_ID</code>. Generic OIDC: the email domain isn't in <code>OIDC_ALLOWED_EMAIL_DOMAINS</code>.</p>
+</details>
+<details class="failure">
+<summary>Your identity provider did not confirm your email address…</summary>
+<p>The ID token had no verified email. For Microsoft, add the <code>email</code> and <code>xms_edov</code> optional claims. For generic OIDC, request the <code>email</code> scope and check that the provider sends <code>email_verified</code> as a boolean.</p>
+</details>
+<details class="failure">
+<summary>Your account is not set up in AlgoBridge yet.</summary>
+<p>No user is invited with this email, and <code>AUTH_ALLOWED_DOMAINS</code> doesn't cover it. An admin can invite the person on the <strong>Users</strong> page.</p>
+</details>
+<details class="failure">
+<summary>This account is disabled.</summary>
+<p>An admin can enable the account on the <strong>Users</strong> page.</p>
+</details>
+<details class="failure">
+<summary>This AlgoBridge account is already linked to a different sign-in from that provider.</summary>
+<p>The AlgoBridge account is already tied to another identity from the same provider. An admin has to resolve this; unlinking isn't self-service yet.</p>
+</details>
+<details class="failure">
+<summary>Sign-in with your identity provider did not complete.</summary>
+<p>The provider returned an error, for example because consent was denied. Try again, and check the application settings in the provider if it persists.</p>
+</details>
+<details class="failure">
+<summary>Your sign-in took too long or was already used.</summary>
+<p>More than 10 minutes passed, or the sign-in was already completed once. Click the provider button again.</p>
+</details>
+<details class="failure">
+<summary>Your identity provider could not be reached.</summary>
+<p>AlgoBridge couldn't reach the provider's discovery or token endpoint. Wait and try again. Admins can still sign in with a password unless <code>AUTH_LOCAL_LOGIN=off</code>.</p>
+</details>
+<details class="failure">
+<summary>The container refuses to start</summary>
+<p>A provider is listed in <code>AUTH_PROVIDERS</code> without all its variables, <code>MICROSOFT_TENANT_ID</code> isn't a GUID, <code>OIDC_ISSUER</code> isn't <code>https</code>, or <code>AUTH_LOCAL_LOGIN</code> conflicts with <code>AUTH_PROVIDERS</code>. The startup error names the variable.</p>
+</details>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../users-and-roles/">Users and roles</a></li>
+<li><a href="../../getting-started/configuration/">Configuration</a></li>
+<li><a href="../../concepts/security/">Security</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+  
+  
+    <nav class="ab-pager" aria-label="Footer">
+      
+        <a href="../mappings/" class="ab-pager__link ab-pager__link--prev" rel="prev">
+          <svg class="ab-pager__icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+          <span class="ab-pager__text"><small>Previous</small><span>Mappings</span></span>
+        </a>
+      
+      
+        <a href="../users-and-roles/" class="ab-pager__link ab-pager__link--next" rel="next">
+          <span class="ab-pager__text"><small>Next</small><span>Users and roles</span></span>
+          <svg class="ab-pager__icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+        </a>
+      
+    </nav>
+  
+
+
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+  <footer class="ab-foot">
+    <section class="ab-help" aria-labelledby="ab-help-title">
+      <div class="ab-help__text">
+        <h2 id="ab-help-title">Want help running AlgoBridge?</h2>
+        <p>CloudAlgo builds AlgoBridge. We help teams move from their current sync tool, review mappings and schemas, and keep production sync running with response-time commitments.</p>
+      </div>
+      <div class="ab-help__acts">
+        <a class="ab-btn ab-btn--primary" href="https://cloudalgo.com/#schedule">Book a consultation</a>
+        <a class="ab-btn ab-btn--secondary" href="https://cloudalgo.com/">Visit cloudalgo.com</a>
+      </div>
+    </section>
+  
+  <div class="ab-foot__inner">
+    <div class="ab-foot__about">
+      <a class="ab-brand" href="../..">
+        <svg class="ab-mark" width="32" height="20" viewBox="0 0 32 20" aria-hidden="true">
+          <path class="belt" stroke-width="2.4" d="M7 3H25A7 7 0 0 1 25 17H7A7 7 0 0 1 7 3Z"/>
+          <circle class="c-sf" cx="7" cy="10" r="4.6"/>
+          <circle class="c-pg" cx="25" cy="10" r="4.6"/>
+        </svg>
+        <span class="ab-brand__word"><span class="ab-brand__algo">Algo</span><span class="ab-brand__bridge">Bridge</span></span>
+      </a>
+      <p>Two-way sync between one Salesforce org and one PostgreSQL database. Self-hosted, open source, and careful with your org's API limits.</p>
+    </div>
+    <nav class="ab-foot__col" aria-label="Documentation">
+      <h2>Docs</h2>
+      <a href="../../getting-started/install/">Install</a>
+      <a href="../../getting-started/first-sync/">Your first sync</a>
+      <a href="../">Guides</a>
+      <a href="../../concepts/">Concepts</a>
+    </nav>
+    <nav class="ab-foot__col" aria-label="Project">
+      <h2>Project</h2>
+      <a href="../../release-notes/">Release notes</a>
+      <a href="../../pricing/">Pricing and support</a>
+      <a href="../../faq/">FAQ</a>
+        <a href="https://github.com/cloudalgo/algobridge-v2">GitHub</a>
+    </nav>
+  </div>
+  <div class="ab-foot__base">
+    <span>AlgoBridge, a CloudAlgo project</span>
+      <a href="https://cloudalgo.com">cloudalgo.com</a>
+  </div>
+</footer>
+
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "content.code.copy", "content.tabs.link", "search.highlight"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.83f73b43.min.js"></script>
+      
+        <script src="../../assets/js/diagrams.js"></script>
+      
+    
+  </body>
+</html>

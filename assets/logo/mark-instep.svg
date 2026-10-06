@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 20" role="img" aria-label="AlgoBridge">
+  <defs>
+    <mask id="ab-hub-sf" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="20"><rect width="32" height="20" fill="#fff"/><circle cx="7" cy="10" r="1.5"/><rect x="6.1" y="4.2" width="1.8" height="2.6" transform="rotate(45 7 10)"/></mask>
+    <mask id="ab-hub-pg" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="20"><rect width="32" height="20" fill="#fff"/><circle cx="25" cy="10" r="1.5"/><rect x="24.1" y="4.2" width="1.8" height="2.6" transform="rotate(45 25 10)"/></mask>
+  </defs>
+  <path d="M7 3H25A7 7 0 0 1 25 17H7A7 7 0 0 1 7 3Z" fill="none" stroke="#17191C" stroke-width="2"/>
+  <circle cx="7" cy="10" r="5.3" fill="#05779A" mask="url(#ab-hub-sf)"/>
+  <circle cx="25" cy="10" r="5.3" fill="#365F88" mask="url(#ab-hub-pg)"/>
+</svg>
