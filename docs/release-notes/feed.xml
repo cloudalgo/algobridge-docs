@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>AlgoBridge release notes</title>
+  <id>https://bridge.cloudalgo.com/docs/release-notes/</id>
+  <link href="https://bridge.cloudalgo.com/docs/release-notes/"/>
+  <link rel="self" href="https://bridge.cloudalgo.com/docs/release-notes/feed.xml"/>
+  <updated>2026-10-16T00:00:00Z</updated>
+  <author><name>CloudAlgo</name></author>
+  <entry>
+    <title>Registration keys</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#registration-keys</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#registration-keys"/>
+    <updated>2026-10-16T00:00:00Z</updated>
+    <summary>- Every instance needs a free registration key. The key must fit the Salesforce org's kind: production, sandbox or Developer Edition. It is verified inside the instance, so it needs no network. See Registration keys. - A License panel in Settings to save or remove the key, see its state, and paste a status token from CloudAlgo by hand. LICENSE_KEY sets the key from the environment instead. - Sync pauses, nothing fails. A missing, wrong-kind, suspended or expired license holds back all Salesforce work; jobs complete and no change is lost. Alerts, the algobridge_license_state metric and the lice</summary>
+  </entry>
+  <entry>
+    <title>Alerts, webhooks, the API and Settings</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#alerts-webhooks-the-api-and-settings</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#alerts-webhooks-the-api-and-settings"/>
+    <updated>2026-10-16T00:00:00Z</updated>
+    <summary>- Alerts on their own screen and by email, through your SMTP server. - Webhooks: signed events about alerts, mappings and connections, sent to endpoints you add. - An audit log of console actions. - The /api/v1 API with access tokens, and configuration as code for mappings. - Schema drift checks that notice when a mapped field or column changes on either side. - A status page, metrics and a Settings page for instance settings.</summary>
+  </entry>
+  <entry>
+    <title>0.9.0-rc.1</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#090-rc1</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#090-rc1"/>
+    <updated>2026-10-16T00:00:00Z</updated>
+    <summary>- The first release candidate. AlgoBridge now has a version number, and each release is a container image, ghcr.io/cloudalgo/algobridge, built for amd64 and arm64. Release candidates are for testing and are not public; the first public release comes later. - Install from a pinned image. The reference Compose file pulls the release you name in deploy/.env instead of building from source, and never uses latest. See Install. - Signed and scanned. Every image is signed, checked for critical vulnerabilities before release, and carries a software bill of materials. See Verify the image.</summary>
+  </entry>
+  <entry>
+    <title>Change notifier</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#change-notifier</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#change-notifier"/>
+    <updated>2026-10-06T00:00:00Z</updated>
+    <summary>- Push notifications from Salesforce. Record-triggered Flows tell AlgoBridge which objects changed, so it learns about changes without spending API calls. Notifications carry object names only, never record data. See Change notifier. - One-click pairing between the instance and the org, at a cost of 2 API calls, with key rotation and an instant revoke. - Signed requests. Every notification is signed and checked for key, org, timestamp, replay and rate. Repeated failed requests open an alert. - A slow fallback poll, hourly by default, catches anything a notification missed. - Your own saves are</summary>
+  </entry>
+  <entry>
+    <title>Apex probe and change sources</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#apex-probe-and-change-sources</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#apex-probe-and-change-sources"/>
+    <updated>2026-10-05T00:00:00Z</updated>
+    <summary>- The Apex bundle. A small, read-only Apex package you can deploy to your org from the console. It answers &quot;has anything changed?&quot; for up to 90 objects in one API call, against 5 per call without it. - Choose your change source: Composite (the default, nothing to install), Apex probe or change notifier. AlgoBridge verifies your choice before saving it, re-checks it daily, and falls back with an alert if it stops working. See Change sources.</summary>
+  </entry>
+  <entry>
+    <title>Live log</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#live-log</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#live-log"/>
+    <updated>2026-10-03T00:00:00Z</updated>
+    <summary>- A real-time view of every process's log lines in the console, for administrators. Follow, pause, filter and copy. Nothing is stored; the log streams only while someone is watching. See Live log. - Clearer SSO refusals. When an identity provider refuses a sign-in, the log now records the provider's error code.</summary>
+  </entry>
+  <entry>
+    <title>Initial load, Reload and the daily sweep</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#initial-load-reload-and-the-daily-sweep</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#initial-load-reload-and-the-daily-sweep"/>
+    <updated>2026-09-25T00:00:00Z</updated>
+    <summary>- Initial load of every record when you activate a mapping, over REST or Bulk API, whichever costs fewer calls, with progress on the console. - Reload empties a table and loads it again. You confirm it by typing the table name. - Daily reconciliation sweep removes rows Salesforce no longer has and repairs rows that differ. It refuses to delete a large share of a table at once. - Outbound sends on a latency bound: a batch goes when 200 changes are waiting or the oldest has waited the maximum wait. - Formula fields are blocked from sync, because polling cannot keep them correct.</summary>
+  </entry>
+  <entry>
+    <title>API budget governor and adaptive intervals</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#api-budget-governor-and-adaptive-intervals</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#api-budget-governor-and-adaptive-intervals"/>
+    <updated>2026-09-21T00:00:00Z</updated>
+    <summary>- Soft and hard thresholds for the org's API usage. Above the soft threshold AlgoBridge slows down; above the hard threshold it pauses Salesforce calls, while changes keep queuing. See API budget. - Adaptive poll intervals. A quiet object is polled less often, and a busy one returns to its minimum interval.</summary>
+  </entry>
+  <entry>
+    <title>Salesforce to PostgreSQL sync</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#salesforce-to-postgresql-sync</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#salesforce-to-postgresql-sync"/>
+    <updated>2026-09-21T00:00:00Z</updated>
+    <summary>- Change probes that check 5 objects per API call before reading anything. - Fetch and apply of changed records, matched on sfid and then on External ID, including deletes. - Conflict policies per mapping: sf_wins, pg_wins and latest_wins. See Conflicts.</summary>
+  </entry>
+  <entry>
+    <title>PostgreSQL to Salesforce sync, Bulk API and Activity</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#postgresql-to-salesforce-sync-bulk-api-and-activity</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#postgresql-to-salesforce-sync-bulk-api-and-activity"/>
+    <updated>2026-09-21T00:00:00Z</updated>
+    <summary>- Writes to Salesforce over SOAP, 200 records per call, sending only changed fields, with the new sfid written back to your row. - Bulk API v2 for runs of 2,000 records or more. - Retries with backoff for rejected changes; failures are parked rather than lost. - The Activity screen: every change in both directions, with filters, record detail and Salesforce's error text. Retry or discard a failed change, or retry all failures.</summary>
+  </entry>
+  <entry>
+    <title>Provisioning</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#provisioning</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#provisioning"/>
+    <updated>2026-09-19T00:00:00Z</updated>
+    <summary>- Tables built for you. AlgoBridge creates and extends mapped tables, the change log and the capture trigger in your database. - Additive changes only. It never drops or recreates a table, and it refuses a change that would narrow a column. - You stay in control. Every change is shown as a diff and runs only when you press Apply. A preflight check names any missing database grant.</summary>
+  </entry>
+  <entry>
+    <title>Mappings</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#mappings</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#mappings"/>
+    <updated>2026-09-18T00:00:00Z</updated>
+    <summary>- Map Salesforce objects to tables: choose fields, set direction (read-only or read-write), pick an External ID, add reference fields. - Choose a write algorithm: Ordered or Merged.</summary>
+  </entry>
+  <entry>
+    <title>Job runner</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#job-runner</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#job-runner"/>
+    <updated>2026-09-15T00:00:00Z</updated>
+    <summary>- Background jobs coordinated entirely in PostgreSQL, with a worker registry, automatic takeover when a worker stops, and a watchdog that restarts stalled schedules. - The Jobs and workers screen. See Workers and jobs.</summary>
+  </entry>
+  <entry>
+    <title>Salesforce connection</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#salesforce-connection</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#salesforce-connection"/>
+    <updated>2026-09-15T00:00:00Z</updated>
+    <summary>- Connect your org through an External Client App, using OAuth with PKCE against your My Domain. Tokens are stored encrypted. - API usage at a glance. The connection screen shows the org's API usage and AlgoBridge's own share. See Salesforce connection.</summary>
+  </entry>
+  <entry>
+    <title>Client database connection</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#client-database-connection</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#client-database-connection"/>
+    <updated>2026-09-14T00:00:00Z</updated>
+    <summary>- Connect your PostgreSQL from the console or with CLIENT_DATABASE_URL. The connection string is stored encrypted. See Client database. - Encrypted secrets with key rotation, through the rotate-encryption-key command. - A setup checklist on the dashboard.</summary>
+  </entry>
+  <entry>
+    <title>Single sign-on, form protection and user management</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#single-sign-on-form-protection-and-user-management</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#single-sign-on-form-protection-and-user-management"/>
+    <updated>2026-09-14T00:00:00Z</updated>
+    <summary>- Single sign-on through OpenID Connect, with presets for Google Workspace and Microsoft Entra ID and a generic option for other providers. Optional sign-up by email domain, and a setting to require SSO. See Single sign-on. - Every form is protected by a signed token and a one-time key, so forged and double submissions are refused. - User management: invitations, role changes, disabling users and admin-issued password-reset links, with optional email over SMTP. See Users and roles.</summary>
+  </entry>
+  <entry>
+    <title>Foundation, sign-in and console shell</title>
+    <id>https://bridge.cloudalgo.com/docs/release-notes/#foundation-sign-in-and-console-shell</id>
+    <link href="https://bridge.cloudalgo.com/docs/release-notes/#foundation-sign-in-and-console-shell"/>
+    <updated>2026-09-13T00:00:00Z</updated>
+    <summary>- One container image that runs as console, worker or both, with health endpoints and a migrate command. - Local sign-in with argon2id passwords, optional two-step verification and account lockout. - Three roles (viewer, member, admin), with every route denied unless it names the permission it needs. - The console shell and the create-admin command for the first administrator.</summary>
+  </entry>
+</feed>

@@ -1,0 +1,59 @@
+/* The /compare/ pages. Colours come from tokens.css; shared pieces (data tables, panels, sections, the
+   closing band) from base.css and marketing.css. */
+
+/* ---- comparison tables ---- */
+.cmp .data tbody th{text-align:left;font:600 var(--t-sm)/1.45 var(--sans);color:var(--ink);padding:12px 16px;border-top:1px solid var(--line-2);vertical-align:top;min-width:150px}
+.cmp .data tbody tr:first-child th{border-top:0}
+.cmp .data td{line-height:1.45}
+.cmp .data td.none{color:var(--ink-3)}
+.cmp .data thead th a{color:inherit;text-decoration-color:var(--line)}
+.cmp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cell-doc{display:inline-block;margin-left:2px;font-size:12px;font-weight:600}
+.ref{font-size:11px;line-height:0;margin-left:2px;font-family:var(--mono)}
+.ref a{text-decoration:none}
+.cmp-note{margin:12px 0 0;font-size:13px;color:var(--ink-3)}
+
+/* ---- the verdict ---- */
+.verdict{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:28px}
+.verdict .panel{padding:22px 24px}
+.verdict h3{font-size:19px;margin:0 0 10px}
+.verdict ul{margin:0;padding-left:20px;display:grid;gap:8px;color:var(--ink-2);font-size:15.5px}
+.verdict .panel.mine{border-top:3px solid var(--accent)}
+@media (max-width:800px){.verdict{grid-template-columns:1fr}}
+
+/* ---- the real differences: one topic per block ---- */
+.diffs{display:grid;gap:0;border-top:2px solid var(--ink)}
+.diff{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px 48px;padding:28px 0;border-bottom:1px solid var(--line)}
+.diff h3{font-size:22px;line-height:1.15;margin:0}
+.diff p{margin:0 0 12px;color:var(--ink-2);max-width:68ch}
+.diff p:last-child{margin-bottom:0}
+.diff ul{margin:0 0 12px;padding-left:20px;color:var(--ink-2);max-width:68ch}
+.diff li{margin:4px 0}
+@media (max-width:800px){.diff{grid-template-columns:1fr}}
+
+/* ---- numbered steps (moving across, what you would build) ---- */
+.steps{list-style:none;margin:0;padding:0;counter-reset:step;display:grid;gap:0;border-top:1px solid var(--line);max-width:860px}
+.steps > li{counter-increment:step;display:grid;grid-template-columns:48px minmax(0,1fr);gap:4px 16px;padding:20px 0;border-bottom:1px solid var(--line)}
+.steps > li::before{content:counter(step);grid-row:span 2;font:700 22px/1 var(--brand);color:var(--accent)}
+.steps h3{font-size:18px;margin:0;font-family:var(--sans);font-weight:650;letter-spacing:0}
+.steps p{margin:4px 0 0;color:var(--ink-2)}
+
+/* ---- hub: the three comparisons and who each option suits ---- */
+.cmp-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.cmp-links a{display:block;padding:22px 24px;text-decoration:none;color:var(--ink)}
+.site .cmp-links a{color:var(--ink)}
+.cmp-links a:hover{border-color:var(--ink-3)}
+.cmp-links h3{font-size:20px;margin:0 0 8px}
+.cmp-links p{margin:0;color:var(--ink-2);font-size:15px}
+.fits{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 48px;border-top:2px solid var(--ink)}
+.fits > div{padding:22px 0;border-bottom:1px solid var(--line)}
+.fits h3{font-size:20px;margin:0 0 8px}
+.fits p{margin:0;color:var(--ink-2)}
+@media (max-width:900px){.cmp-links,.fits{grid-template-columns:1fr}}
+
+/* ---- sources with their quotes ---- */
+.sources h2{font-size:var(--t-h3);margin:0 0 12px}
+.sources > p{margin:0 0 12px;max-width:68ch}
+.sources li{padding-left:4px}
+.sources li:target{background:var(--accent-soft)}
+.sources q{display:block;margin:2px 0 6px;color:var(--ink-2);font-style:normal}

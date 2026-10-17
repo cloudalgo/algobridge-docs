@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AlgoBridge is under maintenance</title>
+<meta name="description" content="bridge.cloudalgo.com and the AlgoBridge docs are offline for maintenance for a short while. AlgoBridge instances you run keep syncing.">
+<link rel="canonical" href="https://bridge.cloudalgo.com/docs/guides/change-sources/">
+<link rel="icon" href="/assets/site/images/mark-instep-sm.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/site/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site/tokens.css">
+<meta property="og:title" content="AlgoBridge is under maintenance">
+<meta property="og:description" content="The site and docs are offline for a short while. AlgoBridge instances you run keep syncing.">
+<meta property="og:image" content="https://bridge.cloudalgo.com/assets/site/cards/home.png">
+<style>
+:root{--cycle:9s}
+
+/* The maintenance page (doc-site/theme/maintenance.html), served at every address while site.json says
+   "maintenance": true. Colours and faces come from /assets/site/tokens.css. Layout: one screen, text on the left and the belt machine on the right, a live-log strip beneath; stacked on phones.
+   The brand is light only (packages/ui/scss/_tokens.scss), so this page commits to one look. */
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{color:var(--accent-strong)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.page{min-height:100%;display:grid;grid-template-rows:auto 1fr auto;padding-block:28px 24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{width:100%;max-width:1160px;margin:0 auto}
+
+/* top: wordmark and the status chip */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:inline-flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font:750 21px/1 var(--brand);letter-spacing:-.03em}
+.brand b{color:var(--accent);font-weight:750}
+.brand svg{width:40px;height:25px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border:1px solid var(--line);border-radius:3px;background:var(--surface);font:600 12.5px var(--sans);color:var(--ink-2)}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--accent);position:relative}
+.chip i::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--accent);animation:beat 2.2s ease-out infinite}
+@keyframes beat{from{transform:scale(1);opacity:.9}to{transform:scale(2.8);opacity:0}}
+
+/* main: the message and the machine */
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:40px 64px;align-items:center;padding-block:40px}
+h1{margin:0;font:780 clamp(40px,6.4vw,84px)/.95 var(--brand);letter-spacing:-.04em;text-wrap:balance}
+.sub{margin:18px 0 0;font:600 clamp(18px,1.8vw,22px)/1.35 var(--sans);font-stretch:108%;color:var(--ink-2);max-width:30ch}
+.body{margin:22px 0 0;color:var(--ink-2);max-width:52ch}
+.facts{list-style:none;margin:26px 0 0;padding:0;border-top:1px solid var(--line);max-width:52ch}
+.facts li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px;color:var(--ink-2)}
+.facts li b{color:var(--ink);font-weight:620}
+.facts svg{width:16px;height:16px;margin-top:4px}
+.acts{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.btn{display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:3px;font:620 15px var(--sans);text-decoration:none;border:1px solid transparent}
+.btn-primary{background:var(--accent);color:var(--on-accent)} .btn-primary:hover{background:var(--accent-strong);color:var(--on-accent)}
+.btn-secondary{background:var(--surface);color:var(--ink);border-color:var(--line)} .btn-secondary:hover{border-color:var(--ink-3);color:var(--ink)}
+
+/* the machine: the In step mark at full size, its belt lifted off for service and threaded back on */
+.machine{position:relative;margin:0}
+.machine svg{display:block;width:100%;height:auto;overflow:visible}
+.ghost{fill:none;stroke:var(--line);stroke-width:3;stroke-dasharray:6 10}
+.beltpath{fill:none;stroke:var(--ink);stroke-width:18;stroke-linecap:round}
+.wheel-sf{fill:var(--sf)} .wheel-pg{fill:var(--pg)}
+.pk-sf{fill:var(--sf)} .pk-pg{fill:var(--pg)}
+.tool{fill:var(--accent)}
+.caption{display:flex;justify-content:space-between;gap:12px;margin-top:14px;font:500 13px var(--mono);color:var(--ink-3)}
+.caption .phase{position:relative;min-width:20ch;height:1.6em}
+.caption .phase span{position:absolute;left:0;top:0;white-space:nowrap}
+.caption .phase .on{color:var(--ok)} .caption .phase .off{color:var(--accent)}
+
+@media (prefers-reduced-motion:no-preference){
+  .beltpath{stroke-dasharray:100 100;animation:thread var(--cycle) cubic-bezier(.65,0,.25,1) infinite}
+  .spin-sf{animation:turn var(--cycle) linear infinite;transform-origin:110px 110px}
+  .spin-pg{animation:turn var(--cycle) linear infinite;transform-origin:370px 110px}
+  .pkts{animation:ride-window var(--cycle) linear infinite}
+  .tool{animation:tension var(--cycle) cubic-bezier(.65,0,.25,1) infinite}
+  .caption .phase .off{animation:say-off var(--cycle) steps(1) infinite}
+  .caption .phase .on{animation:say-on var(--cycle) steps(1) infinite}
+}
+/* one cycle: running, the belt lifts off the wheels, the copper tensioner works the top run, the belt threads back on */
+@keyframes thread{0%,22%{stroke-dashoffset:0}38%,64%{stroke-dashoffset:100}80%,100%{stroke-dashoffset:200}}
+@keyframes turn{to{transform:rotate(720deg)}}
+@keyframes ride-window{0%,18%{opacity:1}24%,78%{opacity:0}84%,100%{opacity:1}}
+@keyframes tension{0%,34%{opacity:0;transform:translateX(0)}40%{opacity:1;transform:translateX(0)}52%{opacity:1;transform:translateX(150px)}60%{opacity:1;transform:translateX(150px)}66%,100%{opacity:0;transform:translateX(150px)}}
+@keyframes say-off{0%{visibility:hidden}26%{visibility:visible}78%{visibility:hidden}}
+@keyframes say-on{0%{visibility:visible}26%{visibility:hidden}78%{visibility:visible}}
+@media (prefers-reduced-motion:reduce){.caption .phase .off{visibility:hidden}.tool,.pkts{display:none}}
+
+/* the live-log strip: the console's dark well */
+.well{background:var(--well);border-radius:4px;border:1px solid var(--well-line);font:400 12.5px/1.7 var(--mono);color:var(--well-ink);overflow:hidden}
+.well-head{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--well-line);color:var(--well-ink-3);font-size:11.5px}
+.well-head b{font:650 12px var(--sans);color:var(--well-ink)}
+.well-head .follow{margin-left:auto;display:inline-flex;align-items:center;gap:6px}
+.well-head .follow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--lv-info)}
+.log{list-style:none;margin:0;padding:6px 0;height:calc(1.7em * 4 + 12px)}
+.log li{display:grid;grid-template-columns:64px 34px 40px minmax(0,1fr);gap:10px;padding:0 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .t,.log .p{color:var(--well-ink-3)} .log .INF{color:var(--lv-info)} .log .DBG{color:var(--lv-debug)} .log .m{overflow:hidden;text-overflow:ellipsis}
+.log li.new{animation:arrive .7s ease-out}
+@keyframes arrive{from{background:rgba(255,255,255,.06)}to{background:transparent}}
+
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 24px;margin-top:20px;font-size:13px;color:var(--ink-3)}
+.foot a{color:var(--ink-3)}
+
+@media (max-width:880px){
+  .main{grid-template-columns:1fr;padding-block:28px}
+  .machine{order:-1;max-width:460px}
+  .log li{grid-template-columns:58px 30px minmax(0,1fr)} .log .p{display:none}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important}}
+</style>
+</head>
+
+
+<body>
+<div class="page">
+  <header class="wrap top">
+    <a class="brand" href="https://bridge.cloudalgo.com/" aria-label="AlgoBridge">
+      <svg viewBox="0 0 32 20" aria-hidden="true">
+        <path d="M7 3H25A7 7 0 0 1 25 17H7A7 7 0 0 1 7 3Z" fill="none" stroke="var(--ink)" stroke-width="2.4"/>
+        <circle cx="7" cy="10" r="4.6" fill="var(--sf)"/><circle cx="25" cy="10" r="4.6" fill="var(--pg)"/>
+      </svg>
+      <span>Algo<b>Bridge</b></span>
+    </a>
+    <span class="chip" role="status"><i aria-hidden="true"></i>Site and docs under maintenance</span>
+  </header>
+
+  <main class="wrap main">
+    <section aria-labelledby="title">
+      <h1 id="title">We're re-threading the belt.</h1>
+      <p class="sub">bridge.cloudalgo.com and the AlgoBridge docs are offline for a short while.</p>
+      <p class="body">We're doing some work on the product site and the documentation. They'll be back shortly, at the same addresses, so your bookmarks and links keep working.</p>
+      <ul class="facts">
+        <li>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--ok)"/><path d="M4.6 8.2 7 10.5l4.4-4.8" fill="none" stroke="var(--surface)" stroke-width="1.8"/></svg>
+          <span><b>Your instances keep syncing.</b> AlgoBridge runs in your own cloud. This site is not in its data path.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--ok)"/><path d="M4.6 8.2 7 10.5l4.4-4.8" fill="none" stroke="var(--surface)" stroke-width="1.8"/></svg>
+          <span><b>Registration keys still work.</b> Each instance checks its key itself, with no call to this site.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--accent)"/><path d="M8 4.2v4.6M8 10.9v.9" fill="none" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span><b>Need the docs or a hand now?</b> CloudAlgo can send you what you need while the site is down.</span>
+        </li>
+      </ul>
+      <div class="acts">
+        <a class="btn btn-primary" href="https://cloudalgo.com/contact/?product=algobridge&amp;intent=question&amp;utm_source=algobridge-site&amp;utm_medium=cta&amp;utm_content=maintenance">Contact CloudAlgo</a>
+        <a class="btn btn-secondary" href="https://cloudalgo.com/">Visit cloudalgo.com</a>
+      </div>
+    </section>
+
+    <figure class="machine" aria-hidden="true">
+      <svg viewBox="0 0 480 220">
+        <defs>
+          <mask id="m-sf" maskUnits="userSpaceOnUse" x="0" y="0" width="480" height="220">
+            <rect width="480" height="220" fill="#fff"/><circle cx="110" cy="110" r="22" fill="#000"/>
+            <rect x="97" y="22" width="26" height="38" rx="3" fill="#000" transform="rotate(45 110 110)"/>
+          </mask>
+          <mask id="m-pg" maskUnits="userSpaceOnUse" x="0" y="0" width="480" height="220">
+            <rect width="480" height="220" fill="#fff"/><circle cx="370" cy="110" r="22" fill="#000"/>
+            <rect x="357" y="22" width="26" height="38" rx="3" fill="#000" transform="rotate(45 370 110)"/>
+          </mask>
+        </defs>
+        <!-- where the belt runs, so the machine still reads while the belt is off -->
+        <path class="ghost" d="M110 10H370A100 100 0 0 1 370 210H110A100 100 0 0 1 110 10Z"/>
+        <path class="beltpath" pathLength="100" d="M110 10H370A100 100 0 0 1 370 210H110A100 100 0 0 1 110 10Z"/>
+        <g class="spin-sf"><circle class="wheel-sf" cx="110" cy="110" r="76" mask="url(#m-sf)"/></g>
+        <g class="spin-pg"><circle class="wheel-pg" cx="370" cy="110" r="76" mask="url(#m-pg)"/></g>
+        <!-- packets ride while the belt is on: Salesforce along the top, PostgreSQL along the bottom -->
+        <g class="pkts">
+          <rect class="pk-sf" x="-15" y="-11" width="30" height="22" rx="4" opacity="0"><animateMotion path="M130 10H350" dur="2.25s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.25s" repeatCount="indefinite"/></rect>
+          <rect class="pk-sf" x="-15" y="-11" width="30" height="22" rx="4" opacity="0"><animateMotion path="M130 10H350" dur="2.25s" begin="1.125s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.25s" begin="1.125s" repeatCount="indefinite"/></rect>
+          <rect class="pk-pg" x="-15" y="-11" width="30" height="22" rx="4" opacity="0"><animateMotion path="M350 210H130" dur="2.25s" begin=".56s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.25s" begin=".56s" repeatCount="indefinite"/></rect>
+          <rect class="pk-pg" x="-15" y="-11" width="30" height="22" rx="4" opacity="0"><animateMotion path="M350 210H130" dur="2.25s" begin="1.69s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="2.25s" begin="1.69s" repeatCount="indefinite"/></rect>
+        </g>
+        <!-- the copper tensioner works along the top run while the belt is off -->
+        <rect class="tool" x="150" y="-4" width="34" height="28" rx="4" opacity="0"/>
+      </svg>
+      <figcaption class="caption">
+        <span>Salesforce</span>
+        <span class="phase"><span class="on">Belt on, syncing</span><span class="off">Belt off for service</span></span>
+        <span>PostgreSQL</span>
+      </figcaption>
+    </figure>
+  </main>
+
+  <footer class="wrap">
+    <div class="well" aria-label="Maintenance log">
+      <div class="well-head"><b>Maintenance log</b> newest at the bottom<span class="follow">Following</span></div>
+      <ol class="log" id="log" aria-live="off"></ol>
+    </div>
+    <div class="foot">
+      <span>AlgoBridge is free, closed-source software by CloudAlgo.</span>
+      <a href="https://cloudalgo.com/">cloudalgo.com</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var lines = [
+    ["INF", "web", "maintenance window opened for bridge.cloudalgo.com"],
+    ["INF", "web", "docs offline; nothing is deleted, every address comes back"],
+    ["DBG", "web", "lifting the belt off the wheels"],
+    ["INF", "web", "running AlgoBridge instances are not affected"],
+    ["INF", "web", "registration keys are checked inside each instance, not here"],
+    ["DBG", "web", "re-tensioning, threading the belt back on"],
+    ["INF", "web", "checking every link before the site reopens"]
+  ];
+  var log = document.getElementById("log");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var i = 0;
+  function stamp() {
+    var d = new Date();
+    return [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()].map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+  }
+  function add() {
+    var l = lines[i % lines.length]; i++;
+    var li = document.createElement("li");
+    li.className = "new";
+    [["t", stamp()], [l[0], l[0]], ["p", l[1]], ["m", l[2]]].forEach(function (c) {
+      var s = document.createElement("span"); s.className = c[0]; s.textContent = c[1]; li.appendChild(s);
+    });
+    log.appendChild(li);
+    while (log.children.length > 4) log.removeChild(log.firstChild);
+  }
+  for (var k = 0; k < 4; k++) add();
+  if (!reduced) setInterval(add, 2200);
+})();
+</script>
+</body>
+</html>

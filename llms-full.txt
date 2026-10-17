@@ -1,0 +1,3131 @@
+# AlgoBridge documentation
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/api-budget/ -->
+# API budget
+
+Every call AlgoBridge makes to Salesforce counts against your org's API request limit. That is true of any integration you run yourself, and it shapes the whole design. This page explains the limit, how AlgoBridge keeps within it, and how to estimate what your instance will use.
+
+## Why every call counts
+
+Salesforce limits how many API requests an org can make in a rolling 24 hours. An Enterprise Edition org gets 100,000 requests plus 1,000 per user licence. REST, SOAP, Bulk API and Bulk API 2.0 requests all count. Your other integrations share the same allowance.
+
+Some hosted sync services have calls that do not count toward your API request limits. That exemption is not open to software you run yourself. AlgoBridge pays for every call, the same as any other integration in your org, and in return you get no per-row charge and a sync that runs on your own infrastructure.
+
+So AlgoBridge treats call efficiency as a requirement, not a tuning option:
+
+- **Never one call per record.** Reads come in pages of 2,000 records, or as Bulk API jobs. Writes go 200 records per SOAP call, or as Bulk API jobs for large runs.
+- **Cheap when nothing changes.** A probe asks whether an object has changed before anything is read. See [Salesforce to PostgreSQL](salesforce-to-postgres.md#detecting-changes-probes).
+- **The cheaper transport wins.** Loads and sends compare the call cost of each transport and pick the lower one.
+- **A governor watches the total.** It slows and then pauses AlgoBridge before your org runs out.
+
+## Watching usage at no cost
+
+Salesforce reports the org's current usage on every REST response, in the `Sforce-Limit-Info` header, and in the limit information returned with SOAP responses. AlgoBridge reads it from responses it was getting anyway, so tracking usage costs nothing. It also counts its own calls by the hour, so the connection screen can show the org's total use and AlgoBridge's share of it.
+
+## The governor
+
+The governor compares the org's usage with two thresholds you set as instance settings.
+
+| Org usage | State | What happens |
+|---|---|---|
+| below the soft threshold | **normal** | Nothing changes. |
+| at or above **soft** (`sf_api_soft_percent`, default 70%) | **slowed** | Every mapping's poll interval is multiplied by 4, capped at one hour. The outbound maximum wait is multiplied by 4. The daily sweep is deferred. An API budget alert opens. |
+| at or above **hard** (`sf_api_hard_percent`, default 90%) | **paused** | Probes, fetches, writes to Salesforce and new Bulk jobs all wait. The alert escalates. |
+| back below soft minus 5 points | **normal** | Scheduling resumes and the alert closes. |
+
+A few rules make the governor safe to rely on:
+
+- **Capture never pauses.** Changes in PostgreSQL keep queuing in the change log while writes are paused, so a pause costs latency, never data.
+- **The 5-point margin stops flapping.** Without it, an org sitting right on the threshold would open and close the alert on every pass.
+- **Recovery is automatic.** A paused instance moves back to slowed as soon as usage drops below the hard threshold. While paused, AlgoBridge refreshes its usage reading every 10 minutes, so it notices the drop.
+- **It fails open.** Before AlgoBridge has a usage reading, it runs normally rather than blocking.
+- **Loads check headroom first.** An initial load or Reload weighs its estimated cost against the remaining headroom before it starts.
+
+!!! tip "Choosing thresholds"
+    The thresholds are a share of the whole org's allowance, not of AlgoBridge's own use. If other integrations already use most of your limit, lower the soft threshold so AlgoBridge backs off before they are affected.
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/api-budget-governor.html?embed=1" title="Budget governor states" loading="lazy"></iframe>
+[Open the governor states full size](../assets/diagrams/api-budget-governor.html){ target=_blank }
+</div>
+
+## Adaptive intervals
+
+Each mapping polls on its own interval, between a minimum (default 5 minutes, allowed 2 to 60) and a maximum (default 30 minutes). After 3 empty probes in a row the interval doubles. A change resets it to the minimum. A busy object stays near the minimum; a quiet one settles at the maximum and costs few calls. The console shows each mapping's current interval and why it last changed.
+
+## What change detection costs
+
+The cost of finding changes depends on the change source. These figures are for 50 mapped objects.
+
+| Change source | Calls per poll | Calls/day at a 2-minute interval | Calls/day at 5 minutes | Range across intervals |
+|---|---|---|---|---|
+| One query per object (not used; for comparison) | 50 | 36,000 | — | — |
+| Composite probe (default) | 10 (5 objects per call) | 7,200 | about 2,900 | about 480 to 7,200 |
+| Apex probe | 1 (up to 90 objects) | 720 | about 290 | about 48 to 720 |
+| Change notifier | 0 per change | — | — | about 25 a day: an hourly fallback poll plus 1 daily check |
+
+On top of detection, each change source pays for:
+
+- **Fetches.** About 1 call per 2,000 changed records, and at least 1 call for each object a probe finds changed.
+- **The daily check** that your change source still works: 1 call a day.
+- **The daily sweep.** One Bulk query per mapping, about 5 calls per mapping per day.
+
+The [Change notifier](change-notifier.md) page breaks down its costs in full.
+
+## Estimating your calls per day
+
+Add up five parts:
+
+| Part | How to estimate it |
+|---|---|
+| Detection | (objects ÷ objects per call, rounded up) × polls per day. Polls per day = 86,400 ÷ the interval in seconds. |
+| Fetch | For each poll that finds changes: changed objects × (changed records ÷ 2,000, rounded up). |
+| Sweep | 5 × mapped objects. |
+| Change-source check | 1. |
+| Writes to Salesforce | For each read-write mapping: changed rows ÷ 200, rounded up, per send. Each send is at least 1 call, and a mapping sends at most once per maximum wait (60 seconds by default) unless 200 changes are waiting. Runs of 2,000 or more go through Bulk API at about 6 calls each. |
+
+One-off work, such as initial loads and Reloads, comes on top. A REST load costs about 1 call per 2,000 records. A Bulk load costs about 5 calls plus 1 per 50,000 records. AlgoBridge picks the cheaper one.
+
+### Worked example
+
+The figures below are arithmetic from stated assumptions, not measurements.
+
+**Assumptions.** An Enterprise Edition org with 100 user licences, so the limit is 100,000 + 100 × 1,000 = **200,000 calls a day**. 50 mapped objects on the Composite probe. All 50 stay busy enough to poll at the 5-minute minimum all day (the worst case for detection). Each poll finds changes in 10 objects, each with fewer than 2,000 changed records. 5 of the mappings are read-write, and each sends one SOAP batch a minute, around the clock.
+
+| Part | Arithmetic | Calls/day |
+|---|---|---|
+| Detection | 10 calls per poll × 288 polls | 2,880 |
+| Fetch | 10 objects × 1 call × 288 polls | 2,880 |
+| Sweep | 5 × 50 | 250 |
+| Change-source check | | 1 |
+| Writes to Salesforce | 5 mappings × 1,440 sends | 7,200 |
+| **Total** | | **13,211** |
+
+That is about 6.6% of the org's allowance, well under the 70% soft threshold.
+
+Two changes would cut it sharply. Installing the [Apex bundle](../guides/apex-bundle.md) brings detection down from 2,880 to 288 calls. In practice, quiet objects back off toward the 30-minute maximum, so real detection and fetch costs are usually lower than this worst case.
+
+!!! note "Your numbers"
+    The connection screen shows the org's actual usage and AlgoBridge's share. After a day of real traffic, trust those figures over any estimate. See [Salesforce connection](../guides/salesforce-connection.md) and [Change sources](../guides/change-sources.md).
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/architecture/ -->
+# Architecture
+
+AlgoBridge is one container image. It talks to two PostgreSQL databases and one Salesforce org. It has no message broker, no cache and no shared disk. This page explains how those parts fit together and why the design is so small.
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/architecture.html?embed=1" title="AlgoBridge system architecture" loading="lazy"></iframe>
+[Open the architecture diagram full size](../assets/diagrams/architecture.html){ target=_blank }
+</div>
+
+## One instance, one sync pair
+
+An instance syncs exactly one Salesforce org with exactly one client PostgreSQL database. There are no workspaces and no tenants. If you need to sync a second org or a second database, run a second instance.
+
+This keeps the product easy to reason about. Every setting, every job and every alert on an instance belongs to the same pair, and you never have to ask which connection a row belongs to.
+
+## One image, three roles
+
+The same image runs in any of three roles. You choose the role with the `APP_ROLE` environment variable.
+
+| `APP_ROLE` | Serves the console | Runs sync jobs | Typical use |
+|---|---|---|---|
+| `all` (default) | yes | yes | A single container. Good for most installs. |
+| `web` | yes | no | Scale the console separately from the sync work. |
+| `worker` | no | yes | Run sync work away from the public endpoint. |
+
+A fourth mode applies the database migrations and exits. Run it with `docker run <image> migrate`, or set `MIGRATE_ON_BOOT=true` to have the container migrate before it starts. A `web` or `worker` process refuses to boot against a database whose schema is behind its build. It tells you to run the migration first instead of starting in a broken state.
+
+Each process exposes `/healthz` (the process is alive) and `/readyz` (it can reach its database and is ready for traffic).
+
+See [Workers and jobs](../guides/workers-and-jobs.md) for running several workers.
+
+## All coordination happens in PostgreSQL
+
+AlgoBridge has no Redis, no message broker and no external queue. Jobs, locks, schedules and the worker registry all live in PostgreSQL. The job engine keeps its tables in the `algobridge_jobs` schema of AlgoBridge's own database. No process holds coordination state in memory.
+
+This has three practical results:
+
+- **Nothing extra to run.** You operate PostgreSQL and a container. There is no second stateful service to back up, patch or monitor.
+- **Workers are interchangeable.** Any worker can pick up any job. If a worker dies, another one takes over its work in about 20 seconds.
+- **Restarts are safe.** On a normal stop, a worker finishes in-flight work for up to 30 seconds before it exits. Give your container runtime a stop grace period of 45 seconds so the drain can complete.
+
+Each mapping runs on a short self-rescheduling tick of about 10 seconds. A watchdog checks every minute and restarts any mapping whose tick chain has broken. A tick that fails 5 times in a row is set aside as a dead job, so it cannot loop forever.
+
+## Two databases, two owners
+
+AlgoBridge uses two PostgreSQL databases. They must be different databases. They may share a server.
+
+| | AlgoBridge's own database | Your client database |
+|---|---|---|
+| Owned by | AlgoBridge | You |
+| Set by | `DATABASE_URL` | the console, or `CLIENT_DATABASE_URL` |
+| Holds | users and sessions, the Salesforce connection, mappings, jobs and the worker registry, sync runs, alerts, idempotency keys, instance settings, poll watermarks, notifier keys | your mapped tables and the small set of objects AlgoBridge needs to capture your changes |
+| Schema changes | migrations shipped with each release | only additive changes you approve in the console |
+
+The split exists so that AlgoBridge's bookkeeping never mixes with your data. You can grant AlgoBridge narrow rights on your database, back the two up on different schedules, and remove AlgoBridge without leaving product tables among your own.
+
+AlgoBridge enforces the split. It refuses to use its own database as the client database, and the migration refuses to run against a database that already holds AlgoBridge's change log. No transaction ever spans both databases.
+
+### What AlgoBridge adds to your database
+
+Everything AlgoBridge creates in your database lives in one schema, `algobridge` by default, and carries the `algobridge_` prefix. The prefix keeps its objects distinct from yours and from any other sync tool on the same database.
+
+| Object | Purpose |
+|---|---|
+| Your mapped tables | One table per mapped Salesforce object, with a unique index on `sfid` and, where you choose one, on the External ID column. |
+| `hstore` extension | Stores each captured change as old and new key-value pairs. |
+| `algobridge_change_log` | The queue of changes waiting to go to Salesforce. |
+| `algobridge_change_log_archive` | Sent changes, kept for 30 days for the Activity screen. |
+| `algobridge_capture_change()` and the `algobridge_capture` trigger | Records every insert, update and delete on a read-write table. |
+| `algobridge_lastop`, `algobridge_err`, `algobridge_id` columns | On read-write tables only: the row's last sync state, its last error, and a stable row identity. |
+
+Read-only mappings get no trigger and no status columns.
+
+!!! warning "Schema changes are additive only"
+    AlgoBridge never drops or recreates one of your tables. It adds columns and indexes; it never narrows a column type. When you remove a field from a mapping, its column stays. Every change is shown to you as a diff and runs only when you press **Apply**. Before it runs, a preflight check names any database grant that is missing. See [Client database](../guides/client-database.md).
+
+!!! note "TRUNCATE is not captured"
+    Row triggers do not fire on `TRUNCATE`, so a truncated table is not synced to Salesforce. Use `DELETE` when you want removals to reach Salesforce.
+
+## Runs anywhere a container runs
+
+AlgoBridge is built to be provider-agnostic. It needs three things:
+
+1. A long-lived container runtime.
+2. PostgreSQL 15 or later.
+3. Outbound HTTPS to Salesforce.
+
+Beyond that it makes no assumptions about where it runs:
+
+- Secrets arrive as environment variables.
+- All state lives in PostgreSQL, so the container needs no local disk.
+- Logs go to standard output.
+- TLS ends at your reverse proxy or load balancer.
+- Sign-in is local accounts or any OpenID Connect provider.
+- Email, when you want it, is plain SMTP.
+- The application code calls no cloud-provider SDK.
+
+The image is built for more than one CPU architecture.
+
+!!! tip "Scale-to-zero platforms"
+    AlgoBridge runs scheduled work, so it must stay running. On a platform that scales idle containers to zero, set the minimum instance count to at least 1.
+
+Next: [Salesforce to PostgreSQL](salesforce-to-postgres.md), or go straight to [Install](../getting-started/install.md).
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/change-notifier/ -->
+# The change notifier
+
+When a record is saved in Salesforce, a small Apex bundle tells your AlgoBridge instance which object changed. The instance then fetches the changed rows with one batched SOQL query and writes them to PostgreSQL. Learning about the change costs no Salesforce API calls, and an hourly fallback poll catches any notification that gets lost.
+
+This page explains how that works. To set it up, follow [Install the Apex bundle](../guides/apex-bundle.md). To compare the notifier with polling, see [Change sources](../guides/change-sources.md).
+
+<div class="ab-steps" markdown>
+
+| When | Step | What happens |
+|---|---|---|
+| Once | **Pair** | The operator clicks **Pair**. The org and the instance swap a signing key in 2 API calls. |
+| Once per object | **Add Flows** | A save Flow and a delete Flow are added for each notified object. |
+| Every save | **Notify** | The Flow queues a signed POST that carries object names only. This costs 0 API calls. |
+| Per burst of notifications | **Fetch** | One SOQL fetch per mapping pulls every row changed since the watermark into PostgreSQL. |
+
+</div>
+
+## System map
+
+The left region is what gets installed in your org. The right region is the AlgoBridge container behind its TLS proxy. Bold lines are the path a save takes. Red lines carry a signature or a certificate. Dashed lines are reads or one-off setup.
+
+<div class="ab-diagram" markdown>
+<iframe class="tall" src="../../assets/diagrams/notifier/system-map.html?embed=1" title="Change notifier system map" loading="lazy"></iframe>
+[Open the system map full size](../assets/diagrams/notifier/system-map.html){ target=_blank }
+</div>
+
+## What gets installed in your org
+
+You deploy the bundle once from the **Connections** screen. Every name in it starts with `algobridge_`, so nothing in it can collide with anything else in your org.
+
+| Resource | Kind | What it does |
+|---|---|---|
+| `algobridge_Status` | Apex REST | Reports the bundle version, whether the org is paired, the endpoint, and who paired it. The console calls it after pairing and in the daily check. |
+| `algobridge_ChangeProbe` | Apex REST | Answers one question for many objects in a single call: has anything changed since this time? The fallback poll uses it, so 50 objects cost 1 call, not 50. |
+| `algobridge_NotifierPair` | Apex REST | Takes the one-time pairing code from the console, redeems it with the instance, and stores the key it receives. |
+| `algobridge_NotifyChange` | Invocable action | Called by the Flows. It removes duplicate object names, skips saves it should not report, checks the async limits, and queues the send. It catches every error, so it can never fail a user's save. |
+| `algobridge_Notifier` | `@future` callout | Signs the list of object names and posts it to the instance. It uses a 10-second timeout, never retries, never follows redirects, and presents a client certificate when one is configured. |
+| `algobridge_Notifier__c` | Custom setting (hierarchy) | Holds the instance endpoint, key id, signing secret, org id, the pairing user and an optional client certificate name. Only `NotifierPair` writes it. |
+| `algobridge_Integration` | Permission set | Grants the classes to the integration user that AlgoBridge connects as. |
+| `algobridge_Instance` | Remote site setting | Lets Apex call your instance's HTTPS host. It is set to your instance URL at deploy time. |
+
+Each Apex class ships with its own test class.
+
+For every synced object, two record-triggered Flows call `NotifyChange`:
+
+| Flow | Runs | Why |
+|---|---|---|
+| `algobridge_notify_<object>_<hash>_save` | After save | Fires on create and update. |
+| `algobridge_notify_<object>_<hash>_delete` | Before delete | Fires on delete. It has to run before the delete, because the record no longer exists afterwards. |
+
+The hash is six characters derived from the object's API name. It keeps long names unique within Salesforce's 80-character limit for Flow names.
+
+!!! note "Adding the Flows"
+    Today you add the Flows by hand, following the recipe in [Install the Apex bundle](../guides/apex-bundle.md). A coming release adds a background job that deploys and removes them for you. It is described [below](#planned-the-flows-job).
+
+## Pairing: one click, two calls
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/notifier/pairing.html?embed=1" title="Pairing sequence" loading="lazy"></iframe>
+[Open the pairing sequence full size](../assets/diagrams/notifier/pairing.html){ target=_blank }
+</div>
+
+1. **The console opens a pairing slot.** Clicking **Pair** writes a one-time code to AlgoBridge's database. If the round trip hasn't finished within 3 minutes, the code stops working.
+2. **The console calls the org once.** It sends `POST /services/apexrest/algobridge/v1/notifier/pair` with the code and the instance's notify URL, plus the client certificate name when mutual TLS is on. This is the first of the two Salesforce calls.
+3. **Apex calls the instance back.** `NotifierPair` sends `{code, orgId, apexVersion}` to `/notify/v1/pair`. The instance redeems the code once, generates a key, encrypts the secret with AES-GCM, pins the key to the org id, and returns `{keyId, secret, notifyUrl}`.
+4. **Apex stores the key and answers.** The key goes into `algobridge_Notifier__c` with the user who paired. The console receives `{paired, keyId, pairedBy}`, and one status call confirms it. That is the second Salesforce call.
+
+!!! tip "Why the org calls the instance"
+    The secret never passes through your browser or clipboard, and the instance learns the org id from the org itself. Pairing again rotates the key, and the old key stops working straight away.
+
+## A record save, end to end
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/notifier/save-to-postgres.html?embed=1" title="From a record save to PostgreSQL" loading="lazy"></iframe>
+[Open the save sequence full size](../assets/diagrams/notifier/save-to-postgres.html){ target=_blank }
+</div>
+
+1. **The Flow fires inside the user's transaction.** The save Flow or the delete Flow calls `algobridge_NotifyChange.notify`, passing only the object name. Record data never leaves the org on this path.
+2. **`NotifyChange` decides whether to send.** It skips the send when:
+    - the save came from the integration user. That is AlgoBridge writing PostgreSQL changes back, and reporting it would echo the change.
+    - the org isn't paired.
+    - the code is already running in a future or batch context, where Salesforce doesn't allow another `@future` call.
+    - the transaction has used up its future-call limit.
+    - the org is within the last 1% of its daily async Apex allowance. That last 1% is left for your own automation.
+
+    Otherwise it queues one `@future` call per transaction, carrying the object names with duplicates removed. It catches every exception, so the save always commits.
+3. **`Notifier` signs and posts after the commit.** The callout builds the body and signs it with HMAC-SHA256 over a canonical string. The request has a 10-second timeout and is never retried or redirected.
+4. **The instance checks the request, cheapest check first.** The first check that fails rejects the request, so the expensive checks run only once the cheap ones have passed.
+5. **One fetch per mapping.** For each mapping on a named object, the instance queues one `sf-fetch` job and answers `{accepted, ignored}`. Only one fetch job per mapping can be waiting at a time. A bulk load of 10,000 records sends many notifications, but they collapse into a single fetch.
+6. **SOQL since the watermark, then upsert.** The fetch runs under the [API budget governor](api-budget.md). It reads every row changed since the mapping's watermark in REST query pages, and applies them 500 rows at a time. It upserts the rows into your PostgreSQL by `sfid`, then moves the watermark forward.
+
+=== "Signed request"
+
+    ```http
+    POST /notify/v1/changes
+    AlgoBridge-Key-Id:    <key id>
+    AlgoBridge-Org:       <18-character org id>
+    AlgoBridge-Timestamp: <unix seconds>
+    AlgoBridge-Nonce:     <random>
+    AlgoBridge-Signature: v1=<hex>
+
+    {"v":1,"objects":["Account","Contact"]}
+    ```
+
+=== "What the signature covers"
+
+    ```text
+    v1
+    POST
+    /notify/v1/changes
+    <timestamp>
+    <nonce>
+    <org id>
+    <sha256(body) hex>
+
+    signature = hex(HMAC-SHA256(secret, string))
+    ```
+
+### The checks on `/notify/v1/changes`
+
+| Order | Check | What it stops |
+|---:|---|---|
+| 1 | The body is at most 16 KB and is valid JSON | Oversized or garbage payloads, before any lookup |
+| 2 | The key id is known and active | Strangers and rotated keys |
+| 3 | The timestamp is within 5 minutes of the instance's clock | Captured requests replayed later |
+| 4 | The signature matches, compared in constant time | Forged or altered requests, and timing probes |
+| 5 | The org header matches the key's org and the connected org | A key copied into another org |
+| 6 | The nonce hasn't been seen in the last 10 minutes | Replays inside the time window |
+| 7 | The body lists 1 to 200 object names | Malformed bodies |
+| 8 | At most 60 requests a minute per key | Floods from a misbehaving org |
+
+## Safety nets
+
+A notification is a hint to fetch now, not the data itself. If one is lost, the sync is delayed but never wrong, because each of these nets catches up on its own.
+
+| What happens | What catches it | Cost |
+|---|---|---:|
+| The instance is down, or a callout times out | The **hourly fallback poll**. It runs on the hour, so all notified mappings share one `ChangeProbe` call and fetch only the objects that changed. The interval is `sf_notifier_fallback_seconds`, 3600 by default. | 1 call an hour |
+| An admin deactivates or deletes one of the Flows | The **daily check**: one status call and one Flow listing. Drift shows on the mapping's chip. AlgoBridge never turns a Flow back on against an admin's decision. | 2 calls a day |
+| The key is rotated, or the org is paired somewhere else | Requests signed with the old key fail check 2 and are refused. The fallback poll keeps data flowing until the org is paired again. | 0 |
+| The org is close to its daily async Apex allowance | `NotifyChange` stops queueing at the 1% reserve, and the fallback poll takes over. | 0 |
+| A delete or an edit slips past everything | The nightly reconciliation sweep compares ids and catches it. | Already budgeted |
+
+## What change detection costs
+
+AlgoBridge counts against your org's daily API limit, so every way of detecting changes has a price in calls per day. These figures are for **50 synced objects**. Fetching the changed rows costs the same whichever way a change was detected, so it isn't included.
+
+| Detection | How | Calls a day |
+|---|---|---:|
+| Composite polling | Ask every object for changes on the adaptive interval | about 480 to 7,200 |
+| Apex probe polling | One `ChangeProbe` call covers all 50 objects | about 48 to 720 |
+| **Notifier** | Saves push object names, plus the hourly fallback probe and the daily check | **0 + 24 + 2** |
+| One-off setup | Pairing (2 calls), and the Flow deploy once the Flows job ships (at most 8 per object) | up to 402, once |
+
+## Planned: the Flows job
+
+!!! info "Coming in a later release"
+    This section describes behaviour that is still being built. It may change before release.
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/notifier/flows-job.html?embed=1" title="The Flows job" loading="lazy"></iframe>
+[Open the Flows job diagram full size](../assets/diagrams/notifier/flows-job.html){ target=_blank }
+</div>
+
+Whenever a mapping is turned on or off, or the notifier is paired, a background job runs for each affected object. Only one job runs per object at a time, so two triggers for the same object never race. Each run:
+
+1. **Plans.** It lists the object's existing Flows (1 call). It wants a Flow pair if the mapping is on, and nothing if it is off.
+2. **Retires a hand-made Flow.** It deactivates any Flow added by hand from the recipe, so the object doesn't notify twice (up to 2 calls).
+3. **Deploys or removes the pair.** It makes one Metadata API deploy and polls it about 3 times. When the mapping is off, the same step removes the Flows and the chip reads **removed**.
+4. **Reads back and activates.** It reads what was deployed (1 call) and switches on any of its Flows that are still inactive (up to 2 calls). If the org refuses, the chip reads **inactive · activate in Setup** and the job doesn't fail.
+
+That is at most 8 calls per object, spent once. For 50 objects that is at most 400 calls, and the governor spreads them out. While the governor has paused spending, the job waits and runs later. A configuration problem, such as a missing permission, marks the job failed without retrying. A temporary failure retries. Either way, the mapping keeps syncing on the hourly fallback poll.
+
+## Planned: hardening the notify endpoint
+
+Two optional layers are planned for locked-down deployments. Both sit on top of the request signature, and neither replaces it.
+
+Mutual TLS
+:   You upload a client certificate to Salesforce and name it during pairing. The `Notifier` presents it on every send. Your reverse proxy verifies the certificate and forwards its fingerprint in a header. AlgoBridge trusts that header only on requests that come from an address in `TRUSTED_PROXIES`, so a client can't forge it by sending the header itself.
+
+Source allow-list
+:   You choose a verified source: a list of Salesforce egress address ranges. AlgoBridge refuses requests from any other address.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/conflicts/ -->
+# Conflicts
+
+A conflict happens when the same record changes in Salesforce and in PostgreSQL before either change has reached the other side. This page explains exactly when AlgoBridge treats a change as a conflict, and the three policies you can choose for resolving one.
+
+Conflicts only arise on **read-write** mappings. A read-only mapping never writes to Salesforce, so its table simply follows Salesforce.
+
+## When is it a conflict?
+
+"Both sides changed" has a narrow and exact meaning in AlgoBridge. A conflict exists only while the change log holds an **unsent** PostgreSQL change for the record, that is, a change still in the `NEW` or `CLAIMED` state, at the moment a Salesforce change for the same record arrives.
+
+Anything else is not a conflict:
+
+- A PostgreSQL change that has already been sent and accepted is settled. A later Salesforce change is simply applied.
+- A Salesforce change that has already been applied is settled. A later PostgreSQL change is simply sent.
+
+AlgoBridge makes the decision inside the inbound apply transaction, after it has locked the affected rows. An edit you commit while the batch is waiting for its locks is still seen. An edit that comes after waits for the batch to finish. So there is no window in which a change slips past the check.
+
+## The three policies
+
+You set the policy per mapping in the mapping editor. A read-write mapping must have one; the editor defaults to `sf_wins`.
+
+| Policy | What the incoming Salesforce change does | What the pending PostgreSQL change does |
+|---|---|---|
+| `sf_wins` (default) | Applied to your row. | Still sent afterwards. |
+| `pg_wins` | Skipped this pass. Your row is left exactly as it is. | Sent as normal. |
+| `latest_wins` | Applied if Salesforce's change is the same age or newer; skipped if it is older. | Sent as normal. |
+
+The policy only decides what happens to the incoming Salesforce change. It never cancels a pending PostgreSQL change.
+
+### `sf_wins`
+
+Salesforce's version of the record is written to your table at once. Your pending change is still sent afterwards. Updates send only the fields you changed, so Salesforce ends up holding your values for those fields, and its own values everywhere else. The next poll brings that combined record back to PostgreSQL.
+
+Choose this when PostgreSQL should always reflect Salesforce as soon as possible, and your own edits are expected to go through.
+
+### `pg_wins`
+
+The incoming Salesforce change is skipped for this pass, and your row keeps your edit. The watermark still moves past the record, so AlgoBridge does not read it again and again. Your change is then sent. That send gives the record a new `SystemModstamp`, so the next poll fetches it and brings back the combined record.
+
+Choose this when PostgreSQL is the system where edits matter most, and you never want an incoming change to overwrite a row with a send still pending.
+
+### `latest_wins`
+
+AlgoBridge compares two timestamps:
+
+- the record's `SystemModstamp` in Salesforce, and
+- the time your newest unsent change to the record was captured in PostgreSQL.
+
+If the Salesforce change is newer, it is applied as with `sf_wins`. If your change is newer, the Salesforce change is skipped as with `pg_wins`. **Ties go to Salesforce.** Salesforce timestamps are accurate only to the second, and re-applying a record costs nothing, while dropping one could lose an edit.
+
+!!! note "Clock accuracy"
+    `latest_wins` compares a timestamp taken by Salesforce with one taken by your database, so it is only as good as your database server's clock. `sf_wins` and `pg_wins` do not depend on clocks at all.
+
+## Loads and the sweep always side with Salesforce
+
+The conflict policy applies to day-to-day polling. Two jobs follow fixed rules instead:
+
+- **Reload** empties the table and loads it again from Salesforce.
+- The **daily reconciliation sweep** overwrites rows that differ from Salesforce with Salesforce's values. It skips any row that still has a change waiting to be sent. That pending change then goes out and settles the record in the normal way.
+
+See [Salesforce to PostgreSQL](salesforce-to-postgres.md#initial-load-reload-and-the-daily-sweep) for both.
+
+## Why a policy matters
+
+Many sync tools have no conflict setting and simply call their sync eventually consistent, so which edit survives is left to timing. AlgoBridge offers the three policies above per mapping, and the default, `sf_wins`, gives a predictable result for most installs.
+
+See [Mappings](../guides/mappings.md) to set a mapping's policy.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/ -->
+# Concepts
+
+These pages explain how AlgoBridge works and why it works that way. Read them before you plan a production rollout. They cover the decisions that affect your Salesforce API usage, your database and your security review.
+
+| Page | What it covers |
+|---|---|
+| [Architecture](architecture.md) | One container image, the three process roles, and why PostgreSQL does all the coordination. What AlgoBridge stores in its own database and what it adds to yours. |
+| [Salesforce to PostgreSQL](salesforce-to-postgres.md) | How changes made in Salesforce are detected, fetched and applied to your tables. |
+| [Change notifier](change-notifier.md) | The optional push path: Salesforce tells AlgoBridge which objects changed, at no API cost. |
+| [PostgreSQL to Salesforce](postgres-to-salesforce.md) | How a row you write in PostgreSQL is captured, batched and sent to Salesforce, and what happens when Salesforce rejects it. |
+| [API budget](api-budget.md) | Why AlgoBridge counts against your org's API limits, how the governor protects them, and how to estimate your daily calls. |
+| [Conflicts](conflicts.md) | What counts as a conflict, and the three policies for resolving one. |
+| [Security](security.md) | Sign-in, roles, form protection, secret encryption, request signing, and which data leaves your network. |
+
+!!! tip "New to AlgoBridge?"
+    Start with [Architecture](architecture.md), then read [API budget](api-budget.md). The budget page explains the design choice that matters most: how AlgoBridge spends your org's API calls.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/postgres-to-salesforce/ -->
+# PostgreSQL to Salesforce
+
+This page explains how a row you insert, update or delete in PostgreSQL reaches Salesforce. It applies to mappings set to **read-write**. Read-only mappings never write to Salesforce.
+
+The path has four steps:
+
+1. **Capture.** A trigger on your table records the change in a log, inside your own transaction.
+2. **Batch.** Changes wait briefly so they can be sent together.
+3. **Send.** A batch goes to Salesforce over SOAP or Bulk API v2, whichever costs fewer calls.
+4. **Write back.** Salesforce's answer, including the new record Id, is written to your row.
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/postgres-to-salesforce.html?embed=1" title="PostgreSQL to Salesforce data flow" loading="lazy"></iframe>
+[Open the PostgreSQL to Salesforce data flow full size](../assets/diagrams/postgres-to-salesforce.html){ target=_blank }
+</div>
+
+## Capture: a trigger and a change log
+
+When you activate a read-write mapping, AlgoBridge adds a trigger named `algobridge_capture` to its table. The trigger runs before every insert, update and delete, for each row. It writes the row's old and new values, as `hstore`, to `algobridge_change_log`, and it sets the row's `algobridge_lastop` column to `PENDING`.
+
+Because the trigger runs inside your transaction, capture is exact. A change is logged only if your transaction commits, and a rollback leaves nothing behind. Your application keeps writing plain SQL. It needs no client library and makes no API call.
+
+Capture never stops. Even when the [API budget governor](api-budget.md#the-governor) pauses sending, the trigger keeps logging, so nothing is lost while Salesforce is out of reach.
+
+!!! warning "What the trigger cannot see"
+    A trigger captures only the writes that fire it. Three things bypass it, and changes made that way never reach Salesforce:
+
+    - `TRUNCATE`, which fires no row trigger. Use `DELETE` when you want removals to reach Salesforce.
+    - Disabling the trigger with `ALTER TABLE … DISABLE TRIGGER`.
+    - A session with `session_replication_role = replica`, which skips ordinary triggers.
+
+## Batching: size and maximum wait
+
+Sending one change per API call would quickly exhaust your org's limits. So AlgoBridge waits for changes to accumulate, within a bound you control.
+
+Every mapping checks its queue on a tick of about 10 seconds. The check reads PostgreSQL only and costs no Salesforce call. A send starts when either of these is true:
+
+- **200 changes are waiting.** That fills one SOAP call.
+- **The oldest change has waited longer than the maximum wait.** The default is 60 seconds, adjustable from 10 to 900 seconds with `outbound_max_wait_seconds`.
+
+So a busy table sends full batches quickly, and a quiet table sends a single change within about a minute. While the governor has slowed the instance, the maximum wait is multiplied by 4.
+
+A send claims up to 10,000 waiting changes at once. Claims use `SKIP LOCKED`, so two workers never take the same row. Within a mapping, changes are claimed strictly in capture order.
+
+## Choosing the transport: SOAP or Bulk API v2
+
+AlgoBridge picks the transport by estimated call cost.
+
+| | SOAP | Bulk API v2 |
+|---|---|---|
+| Records per call | up to 200 | a job, any size |
+| Cost | 1 call per 200 records | about 6 calls per job |
+| Used when | runs under 2,000 records, and always for Merged writes | runs of 2,000 or more of the same action, Ordered writes only |
+| Answers | at once | asynchronously |
+
+A Bulk job's fixed overhead makes it more expensive than SOAP below about 1,200 records. Switching at 2,000 leaves a clear margin. A Bulk insert also needs the mapping's External ID field so results can be matched back to rows. Without one, the run simply stays on SOAP.
+
+Updates send only the fields that changed. A field you set to `NULL` is sent as a cleared field. Inserts send every writable field.
+
+### Ordered and Merged writes
+
+The instance's write algorithm controls how several changes to the same record are sent.
+
+| | Ordered (default) | Merged |
+|---|---|---|
+| Several changes to one record | Sent one by one, in order | Folded before sending: an insert plus updates becomes one insert, several updates become one update with the latest values |
+| Transport | SOAP, or Bulk for large runs | SOAP only |
+
+Ordered is the safe choice for most installs. Merged saves calls when the same records are updated many times between sends.
+
+### Parents before children
+
+If a row refers to a parent record that has not reached Salesforce yet, the row is held back until the parent is inserted. Only that record and its children wait; everything else keeps syncing, where some sync tools stop the whole queue behind one failed insert.
+
+## Write-back and echo suppression
+
+The Salesforce call runs between two short database transactions, so no lock on your table is held while AlgoBridge waits on the network.
+
+When Salesforce answers, AlgoBridge writes back to each row: the new `sfid` for an insert, the system fields, and the sync state in `algobridge_lastop` and `algobridge_err`. The sent changes move to `algobridge_change_log_archive` in the same transaction. They stay there for 30 days for the Activity screen.
+
+The write-back runs under `SET LOCAL ab.in_sync = true`. The capture trigger sees that setting and does not log these writes. Without it, writing the `sfid` back would itself look like a new change and be sent again. The setting is local to the transaction, so your own sessions are never affected.
+
+## When Salesforce says no
+
+Each change in the log has a state.
+
+| State | Meaning |
+|---|---|
+| `NEW` | Waiting to be sent. |
+| `CLAIMED` | Taken by a send in progress. |
+| `DONE` | Accepted by Salesforce. |
+| `MERGED` | Folded into another change by Merged writes. |
+| `DEAD` | Failed for good; needs your decision. |
+| `DISCARDED` | You chose to drop it. |
+
+### Transient failures are retried
+
+A rejection from Salesforce is always retried, because it is often temporary: a locked record, a validation rule someone is about to fix, or a missing parent. Each change gets 5 attempts. The delay grows from 60 seconds and doubles each time, capped at one hour, with random jitter so retries do not arrive in step. A change that keeps failing reaches `DEAD` after about 15 minutes.
+
+If a worker stops in the middle of a send, its claimed changes return to `NEW` after 21 minutes and are sent again. Inserts go as upserts on the External ID where the mapping has one, so a resent insert updates the record the first attempt created instead of making a duplicate.
+
+### Permanent failures stop at once
+
+Some changes can never be sent, whatever Salesforce says. An example is a row whose value cannot be converted to the field's type. AlgoBridge marks these `DEAD` straight away rather than wasting calls on retries.
+
+### Dead changes stay visible
+
+A `DEAD` change stays in the live log. It is not silently dropped. On the Activity screen you can retry or discard one change, or retry every failed change at once.
+
+!!! info "Error text never reaches the logs"
+    Salesforce's error messages can quote the field values you sent. AlgoBridge stores the error with the change and shows it only on the Activity screen, behind sign-in. It never writes it to a log line.
+
+See [Mappings](../guides/mappings.md) to make a mapping read-write, and [Live log](../guides/live-log.md) to watch sends as they happen.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/salesforce-to-postgres/ -->
+# Salesforce to PostgreSQL
+
+This page explains how a change made in Salesforce reaches your PostgreSQL table. Each mapped object goes through the same three steps:
+
+1. **Detect.** Find out cheaply whether the object has changed since the last pass.
+2. **Fetch.** Read only the changed records, in large pages.
+3. **Apply.** Write them to your table in one transaction, matched on `sfid`.
+
+AlgoBridge detects changes by polling with SOQL, or by being told about them by the optional [change notifier](change-notifier.md). It does not use Salesforce Change Data Capture or streaming events.
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/salesforce-to-postgres.html?embed=1" title="Salesforce to PostgreSQL sequence" loading="lazy"></iframe>
+[Open the Salesforce to PostgreSQL sequence full size](../assets/diagrams/salesforce-to-postgres.html){ target=_blank }
+</div>
+
+## Why polling, and why it is cheap
+
+Every call AlgoBridge makes counts against your org's daily API limit (see [API budget](api-budget.md)). So the design goal is simple: never spend a call per record, and spend as few calls as possible when nothing has changed. In most orgs, most objects are unchanged most of the time. A cheap "has anything changed?" check, followed by a full read only when the answer is yes, uses far fewer calls than reading every object on a timer.
+
+## Watermarks
+
+AlgoBridge keeps a watermark for each mapping in its own database. The watermark is the `SystemModstamp` of the newest record it has applied. Every detect and fetch asks for records at or after that stamp.
+
+The watermark is deliberately cautious:
+
+- **It only moves after the apply commits.** It advances to the highest stamp actually written to your table. A crash mid-fetch repeats some work; it never skips a record.
+- **It uses `>=`, not `>`.** SOQL timestamps have one-second resolution, so several records can share a stamp. Re-reading the boundary second is cheap and safe, because the apply is idempotent.
+- **It stays 120 seconds behind the present.** A record saved in a long Salesforce transaction can appear with a stamp slightly in the past. Holding the watermark back by two minutes keeps such records from being missed.
+- **A long gap triggers a full fetch.** If a watermark is more than 14 days old, AlgoBridge treats the mapping as out of date and fetches it in full. Salesforce keeps deleted records in the recycle bin for 15 days, so a shorter gap still sees every deletion.
+
+## Detecting changes: probes
+
+A probe asks one question per object: has any record changed since the watermark? A singleton probe job runs once a minute and checks every mapping that is due. You choose how the probe is answered. This choice is the instance's **change source**.
+
+| Change source | How it asks | Objects per call | Needs |
+|---|---|---|---|
+| **Composite** (default) | One `queryAll` of `SELECT Id … WHERE SystemModstamp >= <watermark> LIMIT 1` per object, bundled into one Composite request | 5 | nothing extra |
+| **Apex probe** | One call to the AlgoBridge Apex class, which runs the same check for each object inside Salesforce | 90 | the [Apex bundle](../guides/apex-bundle.md) installed in the org |
+| **Change notifier** | Salesforce posts the names of changed objects to AlgoBridge | 0 per change | the Apex bundle, Flows on each object, and a reachable AlgoBridge URL |
+
+The Composite probe uses `queryAll` so that deleted records count as changes too.
+
+The Apex probe class is read-only. It runs `with sharing` and in user mode, so it sees only what the integration user may see. It never returns record data, only which objects have changed.
+
+### Choosing and keeping a change source
+
+You pick the change source on the console. AlgoBridge checks that the source works, with one status call, before it saves your choice. After that it re-checks once a day at 02:20 UTC, at a cost of 1 call.
+
+If your chosen source stops working, for example because someone removed the Apex class, AlgoBridge falls back to the next one that still works. The notifier falls back to the Apex probe if it is verified, and otherwise to Composite. At the same time it opens an alert. Your selection is never changed for you. Once you fix the cause, the next check restores your chosen source. See [Change sources](../guides/change-sources.md).
+
+### The change notifier, in short
+
+With the notifier, two record-triggered Flows on each object call an Apex action when a record is saved. The action sends AlgoBridge one signed `POST /notify/v1/changes` naming the objects that changed. It never sends record data. Salesforce's outbound callouts do not count as API requests, so detection costs nothing per change. AlgoBridge then fetches the changes as usual.
+
+The notifier is a fast path, not the only path. Flows do not fire in every case (undelete and merge, for example). A slow fallback poll, hourly by default, and the daily sweep catch anything a notification missed. The [Change notifier](change-notifier.md) page covers pairing, the request checks, the safety nets and the costs in full.
+
+## Adaptive intervals
+
+Each mapping has its own probe interval, and AlgoBridge adjusts it to how busy the object is:
+
+- It starts at the **minimum interval**: 300 seconds by default, adjustable from 120 to 3600 seconds.
+- After 3 empty probes in a row, the interval doubles, up to the **maximum interval** (1800 seconds by default).
+- As soon as a probe finds a change, the interval drops back to the minimum.
+- If Salesforce rejects one object's probe, only that mapping backs off. The others in the same call carry on.
+
+A busy object is checked often. A quiet one costs a few calls an hour. When the [API budget governor](api-budget.md#the-governor) slows the instance down, all intervals stretch further.
+
+## Fetching changed records
+
+When a probe reports a change, AlgoBridge reads the changed records with one `queryAll`. The query selects the mapped fields plus `IsDeleted`, ordered by `SystemModstamp` ascending. Salesforce returns up to 2,000 records per page, and each page is one API call. Records are applied in batches of 500.
+
+Formula fields are never synced. Their values change without changing `SystemModstamp`, so polling could never keep them correct. Leaving them out is more honest than syncing values that silently go stale.
+
+## Applying records: upsert on `sfid`
+
+Each batch is applied to your table in one transaction:
+
+1. **Deletes first.** Records Salesforce reports as deleted are removed by `sfid`.
+2. **Match on External ID.** If the mapping has an External ID field, a row with the same External ID and no `sfid` yet is updated and gains its `sfid`. This links rows you inserted in PostgreSQL before Salesforce assigned an Id.
+3. **Upsert on `sfid`.** Every live record is then inserted, or updated where a row with the same Salesforce Id already exists.
+
+If one row cannot be written, for example because a value breaks one of your constraints, that row is skipped and counted. The rest of the batch still commits. One bad row never blocks a whole object.
+
+### Echo suppression
+
+The apply runs under `SET LOCAL ab.in_sync = true`. The capture trigger on your table sees that setting and does not record these writes as new changes. Without it, every record AlgoBridge pulled from Salesforce would be sent straight back. The setting is local to the transaction, so it can never leak into your own sessions.
+
+When a record has also changed on the PostgreSQL side, the apply follows the mapping's [conflict policy](conflicts.md).
+
+## Initial load, reload and the daily sweep
+
+Polling handles day-to-day changes. Three other jobs keep a table complete:
+
+- **Initial load.** When you activate a mapping, AlgoBridge counts the records and loads them all. It picks whichever transport costs fewer calls: REST queries at about one call per 2,000 records, or a Bulk API query at about 5 calls plus one per 50,000 records. When the load ends, the watermark is set to the moment it started, so changes made during the load are picked up next.
+- **Reload.** Empties the table and loads it again from Salesforce. Because it erases data, you confirm it by typing the table name.
+- **Daily reconciliation sweep.** Once a day, by default at 03:00 UTC, one Bulk query reads every mapped field of every record, at about 5 calls per mapping. The sweep removes rows Salesforce no longer has and fixes rows that differ, with Salesforce's value winning. It catches what polling cannot, such as records purged from the recycle bin before a poll saw them. It skips rows with a change still waiting to go out, and it refuses to delete a large share of a table at once. It waits while the [governor](api-budget.md#the-governor) has slowed or paused the instance.
+
+See [Mappings](../guides/mappings.md) for activating, reloading and sweeping a mapping, and [Live log](../guides/live-log.md) to watch these passes as they run.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/concepts/security/ -->
+# Security
+
+AlgoBridge holds credentials for your Salesforce org and your database, and it can change records in both. This page explains how it protects them: who can sign in, what each role can do, how every change is protected against forgery and double submission, how stored secrets are encrypted, and what data leaves your network.
+
+## Sign-in
+
+AlgoBridge supports two ways to sign in. You can use both at once.
+
+**Local accounts.** Email and password, with optional two-step verification (TOTP). Passwords are hashed with argon2id. The first administrator is created from the command line with `create-admin`. Local accounts also serve as a break-glass route if your identity provider is unavailable.
+
+**Single sign-on.** One OpenID Connect adapter, with presets for Google Workspace and Microsoft Entra ID, and a generic option for any other OIDC provider. Several providers can be active at the same time. See [Single sign-on](../guides/sso.md).
+
+A few rules apply to every sign-in:
+
+- **Identities are keyed by issuer and subject, never by email.** Changing an email address at your provider cannot hand an account to someone else.
+- **Invite-only by default.** A person needs an invitation before they can sign in. To allow self sign-up through single sign-on, list your email domains in `AUTH_ALLOWED_DOMAINS`. A person with a verified email in one of those domains is created on first sign-in, as a viewer.
+- **You decide who may use a password.** `AUTH_LOCAL_LOGIN` is `all` (the default), `admins` (only administrators may sign in with a password) or `off` (single sign-on only).
+
+| Limit | Value |
+|---|---|
+| Session lifetime | 12 hours, absolute |
+| Idle timeout | 2 hours |
+| Failed attempts before lockout | 5 |
+| Lockout | 15 minutes |
+| Invite and password-reset links | single use, valid for 7 days |
+| A started SSO sign-in | must finish within 10 minutes |
+
+## Roles
+
+AlgoBridge has three roles. Permissions are defined in code, not edited in the console, so a role means the same thing on every instance.
+
+| Role | Can |
+|---|---|
+| **Viewer** | See sync status and errors. |
+| **Member** | Everything a viewer can, plus retry failed records, operate sync, and create, edit and delete mappings. |
+| **Admin** | Everything, including managing connections, users and settings, and viewing the [Live log](../guides/live-log.md). |
+
+Every route is denied unless it names the permission it needs, so a new screen cannot ship open by accident. AlgoBridge also refuses to remove or demote the last administrator. See [Users and roles](../guides/users-and-roles.md).
+
+## Every write is forgery-checked and idempotent
+
+Every form that changes something carries two hidden values:
+
+- **A signed form token** (`_csrf`) proves the form came from AlgoBridge, for this session. The token is an HMAC-SHA256 signature, using a key stored in AlgoBridge's database, and it is bound to your session. A forged or missing token is refused. Scripts send it in the `Algobridge-Form-Token` header.
+- **A one-time idempotency key** (`_idem`) is issued fresh each time a form is shown. If the same form is submitted twice, for example by a double click or a browser retry, the action runs once.
+
+How a repeated submission is answered:
+
+| Case | Answer |
+|---|---|
+| The first submission redirected | The same redirect is sent again. Nothing runs twice. |
+| The first submission rendered a page | `409`. A rendered page may show a one-time secret, so it is never replayed. |
+| The first submission is still running | `409`. |
+| Same key, different form contents | `422`. |
+
+Idempotency keys expire after 24 hours.
+
+!!! warning "Serve AlgoBridge over HTTPS"
+    Over HTTPS, AlgoBridge's cookies carry the `__Host-` prefix, which locks them to your exact origin. AlgoBridge refuses to start with a plain `http://` `PUBLIC_URL`, unless the URL is on loopback or you set `ALLOW_INSECURE_PUBLIC_URL=true`. Use that setting only for local testing.
+
+## Encryption of stored secrets
+
+Secrets AlgoBridge stores in its database are encrypted with AES-256-GCM under the key in `ENCRYPTION_KEY` (32 bytes, base64). This covers:
+
+- the client database connection string,
+- the Salesforce tokens and connected app secret,
+- the change notifier's secrets,
+- two-step verification keys.
+
+Each value records which key encrypted it, so AlgoBridge can tell old keys from new.
+
+### Rotating the key
+
+1. Set the new key in `ENCRYPTION_KEY` and the old one in `ENCRYPTION_KEY_PREVIOUS`.
+2. Run the `rotate-encryption-key` command. It re-encrypts every stored secret under the new key in one transaction.
+3. Remove `ENCRYPTION_KEY_PREVIOUS`.
+
+See [Configuration](../getting-started/configuration.md).
+
+!!! danger "Keep the key safe"
+    Without `ENCRYPTION_KEY`, the stored secrets cannot be decrypted. Store it in your secret manager or platform configuration, never in the image or in source control.
+
+## The Salesforce connection
+
+AlgoBridge connects to Salesforce through an External Client App that you create in your org, using OAuth with PKCE. It connects only to your org's My Domain (`*.my.salesforce.com`). Disconnecting revokes the token in Salesforce. Use a dedicated integration user, so you control exactly what AlgoBridge can see and change. See [Salesforce connection](../guides/salesforce-connection.md).
+
+## Notifier request signing
+
+When you use the [change notifier](change-notifier.md), Salesforce sends requests to AlgoBridge. Every request is signed with HMAC-SHA256 under a secret shared at pairing. AlgoBridge checks the key, the signature, the org, a timestamp within five minutes and a nonce it has not seen before. It also limits body size, the number of object names and the request rate. A refused request gets an empty answer, so a caller learns nothing about why it failed. Repeated refusals open an alert.
+
+A notification carries only object API names, never record data. The worst a stolen secret allows is triggering early fetches, which the governor still bounds. The [Change notifier](change-notifier.md) page lists every check and covers key rotation and revocation.
+
+## What data leaves your network
+
+| Traffic | Direction | What it carries |
+|---|---|---|
+| Salesforce API calls | outbound HTTPS | Queries and writes for the objects and fields you map. |
+| Change notifications | inbound, from your Salesforce org | Object API names only, and only if you use the notifier. |
+| Email | outbound SMTP | Invitation and password-reset links, and only if you configure SMTP. Without SMTP, the links are shown to the administrator instead. |
+
+Nothing else leaves today. The current release has no telemetry and makes no calls to its maintainers.
+
+Registration keys add no traffic. The instance checks its key itself, against public keys built into the image; to keep a key current you paste a status token from CloudAlgo into the License panel. A daily automatic check-in is planned for a later release. It will send the key, a random instance id, the AlgoBridge and Apex bundle versions, the org id (or, for the shared sandbox and Developer Edition keys, a one-way keyed hash of it) and a usage summary of counts, never names, emails, record data, object or field names, or credentials, and it will not be switched on before it is documented. See [Pricing](/pricing/#registration-keys).
+
+Logs go to standard output and never carry field values or Salesforce error text. Salesforce error messages can quote the values you sent, so they are stored with the change and shown only on the authenticated Activity screen.
+
+## Not yet built
+
+These features are planned and are not in the current build:
+
+- mutual TLS and an IP allow-list for the notifier endpoint.
+
+The audit log of console actions, the `/api/v1` API with its access tokens, and outgoing webhooks are built; see [Release notes](../release-notes.md).
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/getting-started/configuration/ -->
+# Configuration reference
+
+This page lists every environment variable AlgoBridge reads, with its default and what it does. Use it when you write your Compose file, Kubernetes manifest or platform config.
+
+AlgoBridge reads its configuration only from environment variables. It never calls a secrets-manager API: if your secrets live in one, have your platform inject them as environment variables.
+
+## How configuration is checked
+
+All settings are parsed once at start, against one schema. If anything is wrong, the process exits before it serves a request, with one line that names every problem:
+
+```text
+Invalid configuration — DATABASE_URL: must be a postgres:// connection string; SMTP_URL and SMTP_FROM must be set together
+```
+
+A few rules apply throughout:
+
+- **An empty value counts as unset** for every optional variable, so `SMTP_URL=` is the same as leaving it out.
+- **Lists are comma-separated.** Spaces around items are trimmed, items are lowercased, and duplicates are dropped.
+- **Some variables come in sets.** Setting only part of a set, such as `SMTP_URL` without `SMTP_FROM`, is refused.
+- **Set the same environment on every container.** Web and worker containers read the same variables, and the `migrate`, `create-admin` and `rotate-encryption-key` commands read them too.
+
+## Core
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `APP_ROLE` | `all` | No | What the container runs: `all` (console and jobs), `web` (console only) or `worker` (jobs only). See [APP_ROLE](install.md#choose-an-app_role). |
+| `PORT` | `3000` | No | The HTTP port every role listens on, including `worker`, for its health checks. An integer from 1 to 65535. |
+| `PUBLIC_URL` | `http://localhost:3000` | Yes, outside a local trial | The address people reach the console at, such as `https://sync.example.com`. Must be a bare `http(s)` origin with no path, query or fragment. Must be `https://` unless the host is `localhost`, `*.localhost`, `127.0.0.1` or `[::1]`. Sign-in redirects, the Salesforce callback and the change notifier's endpoint are built from it, and requests from other origins are rejected. |
+| `ALLOW_INSECURE_PUBLIC_URL` | unset | No | `true` accepts a plain `http://` `PUBLIC_URL` on a non-local host, for example on an isolated network. Session cookies can only be locked to the host over `https`, so use this only on a network you trust. |
+| `LOG_LEVEL` | `info` | No | The lowest level written to stdout: `fatal`, `error`, `warn`, `info`, `debug` or `trace`. Opening the [Live log](../guides/live-log.md) raises it to `debug` for the Live log only, never for stdout. |
+| `MIGRATE_ON_BOOT` | unset | No | `true` makes the container's `serve` command run the platform database migrations before it starts the app. Read by the image's entrypoint, not by the app. Convenient for a single container; with several containers, run `migrate` as a separate step. |
+| `BUILD_COMMIT` | set at build time | No | The git commit the image was built from, shown shortened in the sidebar footer. A 7 to 40 character hex SHA. Normally passed as the `BUILD_COMMIT` build argument rather than set at run time. |
+
+The image also sets `NODE_ENV=production`. You don't need to change it.
+
+## Databases
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `DATABASE_URL` | none | **Yes** | The platform database: AlgoBridge's own users, connections, mappings, jobs and sync state. A `postgres://` or `postgresql://` URL. PostgreSQL 15 or later. |
+| `CLIENT_DATABASE_URL` | unset | No | The client database, the one AlgoBridge syncs. When set, it wins over a connection saved on the Connections screen, and the screen refuses to save or disconnect. See below for the format. |
+
+`CLIENT_DATABASE_URL` is checked at start with the same rules the Connections screen uses. It must:
+
+- start with `postgres://` or `postgresql://`;
+- include a host, a user name, and exactly one database name after the host;
+- carry no query option other than `sslmode`, which must be one of `disable`, `allow`, `prefer`, `require`, `verify-ca` or `verify-full`.
+
+```sh
+CLIENT_DATABASE_URL=postgres://app_user:change-me@db.example.com:5432/app?sslmode=require
+```
+
+It must point at a different database from `DATABASE_URL`. A URL that points at the platform database is refused when the connection is checked.
+
+!!! warning
+    Setting `CLIENT_DATABASE_URL` replaces a connection saved on the Connections screen the first time the connection is checked, and the saved URL cannot be recovered. If you unset the variable later, enter the URL in the console again.
+
+## Encryption
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `ENCRYPTION_KEY` | unset | Needed to connect Salesforce | Encrypts the secrets AlgoBridge stores: Salesforce tokens and app credentials, a client database URL saved in the console, and two-step verification keys. Exactly 32 random bytes in base64: generate it with `openssl rand -base64 32`. The app starts without it, but saving a connection or turning on two-step verification is refused. |
+| `ENCRYPTION_KEY_PREVIOUS` | unset | No | Only while rotating keys: the old key. It still decrypts, and never encrypts. Requires `ENCRYPTION_KEY`, and must differ from it. |
+
+### Rotating the encryption key
+
+Rotation has no downtime.
+
+1. Generate a new key with `openssl rand -base64 32`.
+2. On every container, move the current key to `ENCRYPTION_KEY_PREVIOUS`, put the new key in `ENCRYPTION_KEY`, and restart.
+3. Re-encrypt every stored secret with the new key:
+
+    ```sh
+    docker compose -f deploy/docker-compose.yml run --rm app rotate-encryption-key
+    ```
+
+    It prints `Re-encrypted N stored secret(s) with key <id>. You can now remove ENCRYPTION_KEY_PREVIOUS.` It runs in one transaction: if any value cannot be decrypted, nothing changes, and the command names the problem.
+
+4. Remove `ENCRYPTION_KEY_PREVIOUS` and restart.
+
+## Salesforce
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `SALESFORCE_CLIENT_ID` | unset | No | The consumer key of the External Client App AlgoBridge signs in through. |
+| `SALESFORCE_CLIENT_SECRET` | unset | No | The app's consumer secret. |
+
+Set both or neither. When both are set, they win over credentials saved on the Connections screen, and the screen shows the app as **Set by the deployment**. When neither is set, an admin saves them on the Connections screen instead. The org itself is always connected from the console. See [Salesforce connection](../guides/salesforce-connection.md).
+
+## Registration key
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `LICENSE_KEY` | unset | No | The instance's registration key, exactly as issued. Surrounding spaces are trimmed. When set, it wins over a key saved on the License panel in Settings, and the panel refuses to save or remove a key. |
+
+A value that is not shaped like a key, including the `<paste-key-here>` placeholder in `deploy/.env.example`, stops the instance at start. A key of the right shape that does not verify does not stop it: the license reads **No key** and sync stays paused. See [Registration keys](/pricing/#registration-keys).
+
+## Sign-in and single sign-on
+
+By default, people sign in with an email and password, plus optional two-step verification. Single sign-on providers are added with `AUTH_PROVIDERS`; several can be active at once. See [Single sign-on](../guides/sso.md) for the provider setup.
+
+### General
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `AUTH_PROVIDERS` | `local` | No | Comma-separated sign-in methods: any of `local`, `google`, `microsoft` and `oidc`. Must include `local` unless `AUTH_LOCAL_LOGIN=off`. Each SSO provider listed needs its own settings below. |
+| `AUTH_LOCAL_LOGIN` | `all` | No | Who may sign in with an AlgoBridge password: `all`, `admins` or `off`. `admins` is recommended once SSO works, keeping a break-glass path. `off` removes the password form and needs at least one SSO provider. `create-admin` and admin-issued set-password links work in every mode. |
+| `AUTH_ALLOWED_DOMAINS` | empty | No | Comma-separated email domains, such as `example.com`, whose verified SSO users may sign up on first sign-in without an invite. New accounts start as `viewer`. When empty, every new user needs an invite. |
+
+### Google Workspace
+
+Required together when `AUTH_PROVIDERS` includes `google`.
+
+| Variable | Meaning |
+|---|---|
+| `GOOGLE_CLIENT_ID` | The OAuth client ID. |
+| `GOOGLE_CLIENT_SECRET` | The OAuth client secret. |
+| `GOOGLE_HOSTED_DOMAIN` | Your Workspace domain, such as `example.com`. Only accounts whose hosted domain matches it can sign in, so personal Gmail accounts are always refused. |
+
+### Microsoft Entra ID
+
+Required together when `AUTH_PROVIDERS` includes `microsoft`.
+
+| Variable | Meaning |
+|---|---|
+| `MICROSOFT_CLIENT_ID` | The application (client) ID. |
+| `MICROSOFT_CLIENT_SECRET` | The client secret. |
+| `MICROSOFT_TENANT_ID` | Your directory (tenant) ID, as a GUID. `common`, `organizations` and `consumers` are refused, because they would admit accounts from any tenant. |
+
+### Generic OIDC
+
+For Okta, Keycloak, Auth0 and other standard OpenID Connect providers. The first four are required together when `AUTH_PROVIDERS` includes `oidc`.
+
+| Variable | Required with `oidc` | Meaning |
+|---|---|---|
+| `OIDC_ISSUER` | Yes | The issuer URL. Must be `https://`. AlgoBridge reads the provider's endpoints from its discovery document. |
+| `OIDC_CLIENT_ID` | Yes | The client ID. |
+| `OIDC_CLIENT_SECRET` | Yes | The client secret. |
+| `OIDC_DISPLAY_NAME` | Yes | The provider name on the sign-in button, shown as "Continue with" followed by this name. |
+| `OIDC_ALLOWED_EMAIL_DOMAINS` | No, recommended | Comma-separated email domains the provider is trusted for. Checked on every sign-in that matches by email. When empty, any verified email the provider asserts is accepted, and only the invite list keeps out unwanted accounts. |
+
+Domain lists match exactly: a subdomain of an allowed domain is not covered.
+
+## Email
+
+Email is optional. Without it, invite and password-reset links are shown to the admin once, to copy and send, and alerts appear only in the console.
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `SMTP_URL` | unset | No | The SMTP relay, as an `smtp://` or `smtps://` URL, for example `smtps://user:change-me@mail.example.com:465`. Any provider's SMTP endpoint works. |
+| `SMTP_FROM` | unset | With `SMTP_URL` | The sender, for example `AlgoBridge <noreply@example.com>`. |
+
+Set both or neither.
+
+Alert mail uses the same `SMTP_URL` and `SMTP_FROM`. It goes to every active user whose role carries `alerts.receive` (admins, by default), plus any extra addresses entered on the **Alerts** screen, which also sends a test email. The resolved mail waits until the problem has stayed clear for 15 minutes, so a problem that clears and comes straight back does not send a burst of mail.
+
+## Jobs and workers
+
+No environment variable tunes the job engine. Jobs live in the `algobridge_jobs` schema of the platform database named by `DATABASE_URL`, and the only job-related setting you choose per container is `APP_ROLE`. Sync behaviour such as poll intervals is set per mapping in the console. See [Workers and jobs](../guides/workers-and-jobs.md).
+
+## Demo mode
+
+This version reads no demo setting. A demo instance is planned as the same image with a demo flag, but the feature is not built yet.
+
+## Example
+
+A single-container install behind a TLS proxy, with Google sign-in and email. These are the lines in `deploy/.env`; Compose builds `DATABASE_URL` from `POSTGRES_PASSWORD`:
+
+```sh
+ALGOBRIDGE_VERSION=0.9.0-rc.1
+POSTGRES_PASSWORD=<the generated password>
+APP_ROLE=all
+MIGRATE_ON_BOOT=true
+PUBLIC_URL=https://sync.example.com
+ENCRYPTION_KEY=<the generated value>
+SMTP_URL=smtps://user:change-me@mail.example.com:465
+SMTP_FROM=AlgoBridge <noreply@example.com>
+AUTH_PROVIDERS=local,google
+AUTH_LOCAL_LOGIN=admins
+GOOGLE_CLIENT_ID=change-me
+GOOGLE_CLIENT_SECRET=change-me
+GOOGLE_HOSTED_DOMAIN=example.com
+```
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/getting-started/first-sync/ -->
+# Run your first sync
+
+In this page you connect your PostgreSQL database and your Salesforce org, map one Salesforce object to a table, and watch its records load. It follows the console's own screens in the order they ask for things.
+
+You need a running instance with `ENCRYPTION_KEY` set and an admin who can sign in. If you don't have that yet, [install AlgoBridge](install.md) first.
+
+Until both ends are connected, the **Overview** page reads **Connect both ends of the pair**, and the top bar shows each end as not connected. Both steps below happen on **Connections**, under **Instance** in the sidebar. Only admins see it.
+
+<div class="ab-diagram" markdown>
+<iframe src="../../assets/diagrams/first-sync.html?embed=1" title="First sync steps" loading="lazy"></iframe>
+[Open the first sync steps full size](../assets/diagrams/first-sync.html){ target=_blank }
+</div>
+
+## 1. Connect the client database
+
+The client database is your application's PostgreSQL database: the one AlgoBridge creates tables in and syncs. It must not be AlgoBridge's own platform database.
+
+1. Open **Connections**. The **PostgreSQL** panel reads **Not connected**.
+2. Paste one connection URL into **Connection URL**, for example:
+
+    ```text
+    postgres://app_user:change-me@db.example.com:5432/app?sslmode=require
+    ```
+
+3. Click **Test and connect**.
+
+AlgoBridge connects with a 5-second timeout and runs `SELECT version()` before saving anything. If the test fails, nothing is saved, and the error never shows the password. Once connected, the panel lists the host, port, database, user, SSL mode and server version. The URL itself is stored encrypted and never shown again.
+
+The URL accepts one option, `sslmode` (`disable`, `allow`, `prefer`, `require`, `verify-ca` or `verify-full`). Without it the driver's default applies, which does not use SSL. Use `require` or `verify-full` for any database reached over a network.
+
+!!! tip "Set it from the deployment instead"
+    You can set `CLIENT_DATABASE_URL` on every container instead of using this screen. It then wins over the screen, which shows the connection as **Set by the deployment (CLIENT_DATABASE_URL)**. See [Client database](../guides/client-database.md) for the trade-offs.
+
+### What the database role needs
+
+AlgoBridge runs every statement in your database itself; there is no "copy this SQL to your DBA" path. Before it creates anything, it checks that the role in the URL can:
+
+- create the `hstore` extension, or find it already installed;
+- own the target schema (`algobridge` by default), or create it.
+
+On the first provisioning, the target schema must also be empty. When a check fails, the mapping's Apply panel names the missing grant instead of showing a raw PostgreSQL error.
+
+## 2. Connect Salesforce
+
+AlgoBridge signs in to your org through an External Client App that you create in Salesforce, using OAuth with PKCE. It then acts as the Salesforce user who authorizes it. Use a dedicated integration user, so AlgoBridge's API calls and permissions stay separate from people's.
+
+### Create the External Client App
+
+1. On **Connections**, find the **Salesforce** panel and click **Copy** next to the callback URL. It is your `PUBLIC_URL` followed by `/connections/salesforce/callback`, for example:
+
+    ```text
+    https://sync.example.com/connections/salesforce/callback
+    ```
+
+2. In Salesforce Setup, open **External Client App Manager** and create a new app. Give it a name and a contact email.
+3. Turn on **Enable OAuth** and paste the callback URL as the **Callback URL**.
+4. Add the OAuth scopes **Manage user data via APIs (api)** and **Perform requests at any time (refresh_token, offline_access)**.
+5. Turn on **Require Proof Key for Code Exchange (PKCE)**, and leave **Require secret for Web Server Flow** on.
+6. In the app's policies, set **Refresh Token Policy** to keep the token valid until revoked, or allow refresh token rotation.
+7. Save, then open **Consumer Key and Secret** and copy both. A new app can take a few minutes to become usable.
+
+### Give AlgoBridge the credentials and connect
+
+1. Back on **Connections**, paste the **Consumer key** and **Consumer secret** and click **Save app credentials**. The secret is stored encrypted and never shown again.
+2. Enter the org's **My Domain URL**, such as `https://yourcompany.my.salesforce.com`. A sandbox looks like `https://yourcompany--sandbox.sandbox.my.salesforce.com`. Only hosts ending in `.my.salesforce.com` are accepted.
+3. Click **Connect to Salesforce**. Salesforce opens.
+4. Sign in as the integration user and allow access.
+
+Salesforce sends you back to **Connections**, which now shows the org, the user AlgoBridge is authorized as, and the org's **API usage today**.
+
+??? note "If Salesforce shows an error"
+    | What you see | What to do |
+    |---|---|
+    | `redirect_uri_mismatch` | The app's Callback URL does not match the instance's. Copy it again from Connections, including `https` and with no trailing slash, and check `PUBLIC_URL`. |
+    | The consumer key or secret was rejected | Replace the credentials on Connections. |
+    | The app must allow the `refresh_token` scope | Add the scope to the app, wait a few minutes, and connect again. |
+    | The connect link expired | More than 10 minutes passed, or the link was already used. Click **Connect to Salesforce** again. |
+
+    More cases are in [Salesforce connection](../guides/salesforce-connection.md).
+
+You can also supply the app's credentials as `SALESFORCE_CLIENT_ID` and `SALESFORCE_CLIENT_SECRET`. When both are set they win over the screen.
+
+### Add the registration key
+
+Every instance needs a free registration key before it syncs. The key must fit the org you just connected: a production key for a production org, the shared sandbox key for a sandbox, the shared Developer Edition key for a Developer Edition org. The License panel names the kind your org needs and links to where to get it.
+
+1. Open **Settings**, and find the **License** panel.
+2. Paste the whole key into **Registration key** and click **Save key**. A key that does not verify, or is of the wrong kind for your org, is refused and nothing is saved.
+3. The panel reads **Active**. The first 14 days need no status token; after that, paste a current status token from CloudAlgo in the same panel.
+
+Until a fitting key is saved, the Overview shows **Add a registration key** as a setup step, and sync stays paused. Connecting, **Check connection** and the other setup screens work without a key. You can also set the key as `LICENSE_KEY` on every container; it then wins over the panel. See [Registration keys](/pricing/#registration-keys).
+
+## 3. Pick a change source
+
+The change source decides how AlgoBridge learns that Salesforce records changed. Fetching the changed records costs the same whichever you pick; the source decides what it costs to find out. Choose it on **Connections**, in the **Change detection** panel.
+
+| Source | Installs in your org | Cost to learn about changes |
+|---|---|---|
+| **Composite polling** (default) | Nothing. | One API request per five objects per poll. |
+| **Apex probe** | The AlgoBridge Apex bundle: one read-only class, its tests and a permission set. | One API request per poll for up to 90 objects. |
+| **Change notifier** | The same bundle, a one-time pairing, and two Flows per synced object. Needs AlgoBridge reachable from Salesforce over HTTPS. | Zero, plus one fallback poll an hour. |
+
+For a first sync, keep **Composite polling**. It needs nothing installed, and you can switch later without touching your mappings.
+
+To use the Apex probe instead:
+
+1. In **Change detection**, click **Deploy bundle**. The deploy runs in the background and the panel shows *Deploy succeeded* or *Deploy failed*. The integration user needs **Modify All Data** (or **Modify Metadata Through Metadata API Functions**) and **Author Apex** to deploy.
+2. In Salesforce Setup, assign the **AlgoBridge Integration** permission set (`algobridge_Integration`) to the integration user, and to no one else.
+3. Click **Use this source** on the **Apex probe** card. AlgoBridge makes one status call to the bundle and saves your choice only if the bundle answers.
+
+The change notifier takes a few more steps. See [Change sources](../guides/change-sources.md) and [Apex bundle](../guides/apex-bundle.md).
+
+## 4. Add a mapping
+
+A mapping says which Salesforce object syncs into which PostgreSQL table, with which fields. Members and admins can create mappings.
+
+### Check the instance settings first
+
+Open **Mappings**, under **Sync** in the sidebar. The **Settings** panel holds two instance-wide choices:
+
+- **Target schema**: the PostgreSQL schema AlgoBridge creates its tables in. The default is `algobridge`. You can change it only until the first mapping exists.
+- **Write algorithm**: how changes are sent to Salesforce. **Ordered Writes (recommended)** is the default. **Merged Writes** merges several changes to one record before sending, and reorders parents ahead of children. You can change it at any time.
+
+### Choose the object
+
+1. Click **New mapping**. The first step, **Choose object**, lists the objects in your org.
+2. Search for the object, for example `Account`, and click **Choose**. Click **Refresh** if a new object is missing from the list.
+
+### Choose fields and settings
+
+The second step, **Choose fields and settings**, opens the editor. The table name comes from the object's API name, lowercased, and is fixed once the mapping exists.
+
+| Panel | What to choose |
+|---|---|
+| **Direction** | **Read-only**: Salesforce changes sync to PostgreSQL, and PostgreSQL never writes back. **Read-write**: changes sync both ways. Read-write is unavailable for objects Salesforce reports as neither createable nor updateable. |
+| **When both sides change** | Read-write only. **Salesforce wins** (the default), **PostgreSQL wins**, or **Latest change wins**. See [Conflicts](../concepts/conflicts.md). |
+| **Matching key** | An optional External ID field, chosen from fields that are External ID and Unique in Salesforce. Without one, rows inserted in PostgreSQL risk creating duplicates. |
+| **Polling** | **Fastest** and **Slowest** poll intervals in minutes: 5 and 30 by default, each between 2 and 60. The interval stretches toward the slowest while nothing changes, and snaps back to the fastest when something does. |
+| **Fields** | Tick the fields to sync. `Id` (stored as `sfid`) and `SystemModstamp` are always included, and so is `IsDeleted` when the object has it. `CreatedDate` and `Name` start ticked. Formula fields are listed but disabled, tagged *Formula field — not synced*. |
+| **Reference fields** | Optional. Lets a child row point at its parent by the parent's External ID, for records created in PostgreSQL. |
+
+Each field becomes a column named after its API name, lowercased. Anything that blocks saving is listed under **Problems and warnings**.
+
+Click **Create mapping**. The mapping is saved as a **Draft**: nothing exists in PostgreSQL yet, and nothing syncs.
+
+!!! tip "Start small"
+    For a first sync, pick an object with a modest number of records, make it **Read-only**, and tick only the fields you need. You can add fields later; adding a field adds its column and loads only that column.
+
+## 5. Provision the table
+
+Provisioning makes your client database match the saved mapping. It runs only when you click it.
+
+1. On the mapping's page, find the **Apply** panel. For a new mapping it reads *Nothing exists in PostgreSQL for this mapping yet* and lists the statements it will run.
+2. Read the statements, then click **Create table**.
+
+A worker runs the plan in one transaction: if any statement fails, none of them stick, and the panel shows the failing statement. The mapping shows **Provisioning** while it runs, then **Active**.
+
+For a read-only mapping, AlgoBridge creates:
+
+- the `hstore` extension, if it is missing;
+- the table, with `sfid` and one column per mapped field;
+- a unique index on `sfid`, a unique index on the External ID column if you chose one, and an index on each field you marked **Indexed**.
+
+A read-write mapping also gets the `algobridge_lastop` and `algobridge_err` status columns, the `algobridge_capture` trigger on the table, and, once per schema, the `algobridge_change_log` table and the `algobridge_capture_change()` trigger function.
+
+AlgoBridge never drops or recreates a table to apply a change. Later edits are applied the same way: save, read the pending statements on the **Apply** panel, then click **Apply changes**.
+
+## 6. Watch the initial load
+
+When a mapping first becomes active, AlgoBridge reads the whole object into the table. This is the initial load.
+
+1. AlgoBridge counts the object's records with one `SELECT COUNT()` query, then picks the cheaper transport: REST paging costs about one API call per 2,000 records; a Bulk API 2.0 query costs about five calls plus one per 50,000 records. Small objects go over REST and large ones over Bulk. If the org refuses Bulk, the load falls back to REST.
+2. The mapping's **Load** panel shows the load's kind (**Initial load**), its transport, its status and how far it has read. The **Mappings** list shows the same progress, for example *Loading 42%*.
+3. When the status reads **Completed**, the table holds the object's records, and normal polling takes over from the moment the load started.
+
+If the org's API usage is near its limit, the load waits and shows **Waiting for API budget** rather than spending calls it cannot afford. **Stop load** ends a running load and keeps what it has read; **Reload** starts again from an empty table.
+
+Check the result in your database:
+
+```sql
+SELECT count(*) FROM algobridge.account;
+```
+
+Replace `algobridge` with your target schema and `account` with your table name.
+
+### Follow it in the Live log
+
+Open **Live log**, under **Instance** in the sidebar. It streams every process's log lines to your browser as they happen, so you can watch the load's Salesforce calls and PostgreSQL writes.
+
+- Filter by **Level** (Error, Warn, Info, Debug) and by **Source** (Worker, Queue, SOQL, Salesforce, PostgreSQL, Web), or pick one process or one mapping.
+- While anyone has the Live log open, every process also forwards its debug lines, such as each SOQL query. Your container logs on stdout are unaffected.
+- The Live log keeps no history: lines from before you opened it are not shown. Up to five people can watch at once. Only admins can open it.
+
+See [Live log](../guides/live-log.md) for more.
+
+## 7. Make a change and see it arrive
+
+Edit one of the synced records in Salesforce. Within one poll interval of the mapping (5 minutes by default, or longer if the interval has stretched), the change appears in the PostgreSQL row. Each pass is listed on the **Activity** page.
+
+For a read-write mapping, update a row in PostgreSQL instead. The capture trigger records it in `algobridge_change_log`, and AlgoBridge sends it to Salesforce in its next batch: when 200 changes are waiting, or the oldest has waited 60 seconds. The row's `algobridge_lastop` column shows `PENDING` until the send settles it.
+
+!!! warning "`TRUNCATE` is not synced"
+    The capture trigger fires on `INSERT`, `UPDATE` and `DELETE`, row by row. A `TRUNCATE` changes no row as far as the trigger is concerned, so nothing is deleted in Salesforce. Use `DELETE FROM <table>` to remove records on both sides.
+
+## Next steps
+
+- [Mappings](../guides/mappings.md): edit fields, change direction, reload or delete a mapping.
+- [Salesforce to PostgreSQL](../concepts/salesforce-to-postgres.md) and [PostgreSQL to Salesforce](../concepts/postgres-to-salesforce.md): how each direction works.
+- [API budget](../concepts/api-budget.md): what your mappings cost per day, and how AlgoBridge slows down near the limit.
+- [Users and roles](../guides/users-and-roles.md): invite your team as viewers, members or admins.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/getting-started/ -->
+# Getting started
+
+This section takes you from nothing to a first synced table. You install AlgoBridge, create the first admin, connect both ends of the sync pair, and watch the first records arrive.
+
+## What AlgoBridge is
+
+AlgoBridge is free, self-hosted Salesforce sync, with no licence fee and no per-row charge. Each instance needs a free [registration key](/pricing/#registration-keys). It keeps a Salesforce org and a PostgreSQL database in sync in both directions:
+
+- **Salesforce to PostgreSQL.** AlgoBridge learns which objects changed, either by polling with SOQL on a schedule or from the optional change notifier in your org, then fetches the changed records and upserts them into PostgreSQL tables it creates and owns.
+- **PostgreSQL to Salesforce.** For mappings you make read-write, a row-level trigger captures every `INSERT`, `UPDATE` and `DELETE` into a change log table, and AlgoBridge sends the changes to Salesforce in batches.
+
+A few properties shape how you deploy it:
+
+| Property | What it means for you |
+|---|---|
+| One container image | The same image serves the console and runs the sync work. `APP_ROLE` decides which a container does. |
+| Single tenant | You run your own instance, on your own infrastructure, with your own data. There is no hosted service. |
+| One sync pair per instance | An instance syncs exactly one Salesforce org with one PostgreSQL database. For another pair, run another instance. |
+| PostgreSQL only | Jobs, sessions and all state live in PostgreSQL. There is no Redis, broker or external queue. |
+| Counts against your API limits | Like any integration you run yourself, AlgoBridge spends your org's API requests. Every read and write is batched, and polling slows down or pauses on its own as the org nears its limit. See [API budget](../concepts/api-budget.md). |
+
+AlgoBridge does not use Salesforce Change Data Capture or any streaming API.
+
+## What you need
+
+Before you start, have these ready:
+
+| You need | Why | Notes |
+|---|---|---|
+| A long-lived container runtime | Runs the AlgoBridge image. | Docker Compose, Kubernetes, or any platform that keeps a container running. The worker must stay on: scale-to-zero platforms need a minimum of one instance. |
+| PostgreSQL 15 or later, for AlgoBridge itself | The **platform database**: users, connections, mappings, jobs and sync state. | Set as `DATABASE_URL`. The reference Compose file runs one for you. |
+| A PostgreSQL database for your application data | The **client database**: the tables AlgoBridge syncs. | Must be a different database from the platform database. They may share a server. AlgoBridge refuses to connect its own database as the client database. |
+| A Salesforce org and an External Client App in it | AlgoBridge signs in to the org through this app with OAuth. | You create the app in Salesforce Setup during [your first sync](first-sync.md#2-connect-salesforce). A dedicated integration user is recommended. |
+| Outbound HTTPS | AlgoBridge calls Salesforce's APIs. | Inbound HTTPS from Salesforce is only needed for the optional change notifier. |
+| A public address for the console | Sign-in redirects and the Salesforce callback are built from it. | Set as `PUBLIC_URL`. It must be `https://` unless the host is `localhost`. Terminate TLS at your reverse proxy or platform. |
+
+!!! note "Two databases, always"
+    AlgoBridge keeps its own data and your data apart. The platform database holds the `algobridge_jobs` schema and the `algobridge_migrations` table. The client database holds your mapped tables, the capture triggers and the `algobridge_change_log` table. No transaction ever spans both.
+
+## The path to a first sync
+
+1. **[Install AlgoBridge](install.md).** Start the image and its platform database with Docker Compose, set `PUBLIC_URL` and `ENCRYPTION_KEY`, and check that `/readyz` answers.
+2. **[Create the first admin](install.md#create-the-first-admin).** Run `create-admin`, open the set-password link it prints, and sign in.
+3. **[Connect both ends](first-sync.md#1-connect-the-client-database).** On the Connections screen, connect your client database and your Salesforce org.
+4. **[Add your registration key](first-sync.md#add-the-registration-key).** Paste the free key for your org's kind on the License panel in Settings. Sync stays paused until you do.
+5. **[Add a mapping and provision it](first-sync.md#4-add-a-mapping).** Choose a Salesforce object, choose its fields, then click **Create table**. AlgoBridge creates the table in PostgreSQL and starts the initial load.
+6. **[Watch it sync](first-sync.md#6-watch-the-initial-load).** Follow the initial load on the mapping's Load panel and in the Live log.
+
+When the first sync works, the [configuration reference](configuration.md) lists every environment variable the app reads.
+
+## Where to go next
+
+- [Architecture](../concepts/architecture.md) explains the web and worker roles and how they coordinate through PostgreSQL.
+- [Change sources](../guides/change-sources.md) compares the three ways AlgoBridge can learn about Salesforce changes, and what each costs.
+- [Single sign-on](../guides/sso.md) adds Google Workspace, Microsoft Entra ID or a generic OIDC provider.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/getting-started/install/ -->
+# Install AlgoBridge
+
+In this page you run AlgoBridge and its platform database with Docker Compose, create the first admin, and check that the instance is healthy. Compose is the reference deployment.
+
+## Supported platforms
+
+AlgoBridge stores your customer data, so CloudAlgo supports it on well-established clouds only:
+
+- Amazon Web Services, Microsoft Azure and Google Cloud, on a virtual machine or a container service;
+- their managed Kubernetes services;
+- Heroku.
+
+Each needs a long-running container, PostgreSQL 15 or later, and outbound HTTPS to Salesforce. The image may run elsewhere, but other platforms are not supported.
+
+## Before you begin
+
+You need:
+
+- Docker with the Compose plugin (`docker compose`), version 2.24 or later.
+- The `deploy/` folder from the AlgoBridge repository: `docker-compose.yml` and `.env.example`. The Compose file pulls the published image, so you don't need to build anything.
+- A host name for the console if anyone other than you will use it, such as `sync.example.com`, with TLS terminated in front of AlgoBridge.
+
+## 1. Look at the reference Compose file
+
+`deploy/docker-compose.yml` runs two services:
+
+| Service | What it is |
+|---|---|
+| `db` | PostgreSQL 16, the platform database, with a `pgdata` volume and a `pg_isready` health check. |
+| `app` | AlgoBridge, pulled as `ghcr.io/cloudalgo/algobridge` at the version you pin, listening on port 3000. It starts once `db` is healthy. |
+
+The `app` service takes its image tag and its settings from a `.env` file next to the Compose file:
+
+```yaml
+image: ghcr.io/cloudalgo/algobridge:${ALGOBRIDGE_VERSION:?…}
+env_file:
+  - path: .env
+    required: false
+ports: ["3000:3000"]
+stop_grace_period: 45s
+```
+
+`deploy/.env.example` lists every setting, with the optional ones commented out: email, single sign-on, the client database, the encryption key and the Salesforce app credentials. The [configuration reference](configuration.md) explains each one.
+
+## 2. Set your values
+
+Copy the example and edit the copy. Git ignores `deploy/.env`, so your secrets stay out of the repository.
+
+```sh
+cp deploy/.env.example deploy/.env
+```
+
+1. **Pin the version.** `ALGOBRIDGE_VERSION` names the release to run, for example `0.9.0-rc.1`. There is no `latest` tag, and Compose refuses to start without a version, so an install never pulls an image you didn't choose.
+2. **Set the database password.** Put a strong password in `POSTGRES_PASSWORD`. `openssl rand -hex 16` makes one that needs no escaping. Compose builds `DATABASE_URL` from it, so you write the password once. Left empty, Compose refuses to start.
+3. **Set `PUBLIC_URL`** to the address people use to reach the console. Keep `http://localhost:3000` for a trial on your own machine. Anywhere else it must be an `https://` origin with no path, for example `https://sync.example.com`.
+4. **Generate an encryption key** and set it as `ENCRYPTION_KEY`:
+
+    ```sh
+    openssl rand -base64 32
+    ```
+
+    ```sh
+    ENCRYPTION_KEY=<the generated value>
+    ```
+
+    AlgoBridge starts without it, but it encrypts the Salesforce tokens, stored connection URLs and two-step verification keys with it. Without it you cannot connect Salesforce, save a client database on the Connections screen, or turn on two-step verification.
+
+!!! warning "Keep the key safe"
+    Store `ENCRYPTION_KEY` with your other secrets. If you lose it, AlgoBridge cannot read the connections it stored, and you must connect them again. To change it later, see [rotating the encryption key](configuration.md#rotating-the-encryption-key).
+
+!!! note "Coming from the earlier Compose file?"
+    The database volume keeps the password it was created with, and changing `POSTGRES_PASSWORD` does not change it. The earlier file used `change-me`, so set `POSTGRES_PASSWORD=change-me` in `deploy/.env` to keep using the existing data, and change the password inside PostgreSQL afterwards if you want a new one.
+
+!!! tip "Keep secrets out of the file"
+    For anything beyond a trial, keep `deploy/.env` readable by the account that runs Compose only, or fill it from your platform's secret store. AlgoBridge reads secrets only from environment variables. In `.env`, write `$$` for a literal `$`, and put quotes around a value that contains a space followed by `#`.
+
+## Verify the image
+
+Every release image is signed. Before you start it, you can check that the version you pinned was built by the AlgoBridge release workflow. You need [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) 3 or later. This example checks `0.9.0-rc.1`; use the version in your `.env`:
+
+```sh
+cosign verify ghcr.io/cloudalgo/algobridge:0.9.0-rc.1 \
+  --certificate-identity 'https://github.com/cloudalgo/algobridge-v2/.github/workflows/release.yml@refs/tags/v0.9.0-rc.1' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+A good image prints the signature's details and exits 0. If it reports an error, don't run the image, and tell us.
+
+## 3. Start
+
+From the directory that contains `deploy/`:
+
+```sh
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Compose pulls the image for your pinned version, starts the database, and starts AlgoBridge once the database is healthy.
+
+On start, the container's entrypoint runs the migrations first because `MIGRATE_ON_BOOT` is `true`, then starts the app. Follow the logs while it boots:
+
+```sh
+docker compose -f deploy/docker-compose.yml logs -f app
+```
+
+The migration prints `applied: …` (or `no pending migrations`) and `job schema ready`. Logs are structured lines on stdout.
+
+If a setting is wrong, the container exits at once with a single line that names every problem, for example:
+
+```text
+Invalid configuration — PUBLIC_URL: must be https unless the host is localhost (set ALLOW_INSECURE_PUBLIC_URL=true to accept plain http on a trusted network)
+```
+
+Fix the value and run `up -d` again.
+
+## Create the first admin
+
+AlgoBridge has no default account and no sign-up page. Create the first admin from the command line once the database is migrated:
+
+```sh
+docker compose -f deploy/docker-compose.yml run --rm app create-admin --email you@example.com --name "Your Name"
+```
+
+The command prints:
+
+```text
+Created admin you@example.com (invited).
+Set-password link (shown once, valid 7 days): https://…
+Open it to choose a password, then turn on two-factor authentication.
+```
+
+1. Open the link and choose a password. The link works once and expires after 7 days.
+2. Sign in at your `PUBLIC_URL`.
+3. Open your **Account** page and turn on two-step verification. It is optional, and recommended for every admin.
+
+If the command says `Platform database is not migrated — run migrate first`, run:
+
+```sh
+docker compose -f deploy/docker-compose.yml run --rm app migrate
+```
+
+??? note "Lost the link, or locked out?"
+    - The email must not already belong to a user. If the link expired unused, run the command again with a different email, or have another admin issue a new link from the **Users** page.
+    - If every admin is locked out, run `create-admin` with a new email, then issue reset links for the original accounts from **Users**.
+    - `create-admin` and admin-issued set-password links work in every `AUTH_LOCAL_LOGIN` mode, including `off`. They are the break-glass path when single sign-on is misconfigured.
+    - Outside Docker, run `node dist/cli/create-admin.js --email … --name …` with `DATABASE_URL` and `PUBLIC_URL` set.
+
+Without SMTP configured, invite and password-reset links for other users are shown to the admin once, to copy and send. To email them instead, set [`SMTP_URL` and `SMTP_FROM`](configuration.md#email).
+
+## Check health
+
+The app answers two unauthenticated endpoints on `PORT`:
+
+| Endpoint | Answers | Use it for |
+|---|---|---|
+| `GET /healthz` | `200 {"status":"ok"}` whenever the process is serving HTTP. | Liveness. |
+| `GET /readyz` | `200 {"status":"ready"}` when the platform database answers within 2 seconds and has every migration this build expects. Otherwise `503 {"status":"unavailable"}`, with `"reason":"migrations_pending"` when the database is behind the build. | Readiness, load balancer health checks. |
+
+```sh
+curl -i http://localhost:3000/readyz
+```
+
+The image has its own `HEALTHCHECK` on `/readyz`: every 15 seconds, a 5-second timeout, 3 retries, and a 60-second start period that covers a migration on boot. It uses Node's own `fetch`, since the image has no `curl` or `wget`. `docker compose ps` shows the result.
+
+## Choose an `APP_ROLE`
+
+One image, three roles:
+
+| `APP_ROLE` | Serves the console | Runs jobs | Typical use |
+|---|---|---|---|
+| `all` (default) | yes | yes | A single container. Enough for most installs. |
+| `web` | yes | no | Scale the console separately, behind a load balancer. |
+| `worker` | no | yes | Scale the sync work separately. |
+
+All coordination goes through the platform database, so you can run several `web` and several `worker` containers against the same `DATABASE_URL`. Workers share the queues, and each mapping's sync runs on one worker at a time. If a worker dies mid-job, another takes the job over, usually within 16 to 25 seconds.
+
+Every role listens on `PORT` and answers `/readyz`. Every role needs the same environment, including `ENCRYPTION_KEY`.
+
+!!! warning "Sync needs a running worker"
+    With no `worker` or `all` container running, nothing syncs. The console then marks **Jobs & workers** with **No worker is running. Sync is paused.** See [Workers and jobs](../guides/workers-and-jobs.md).
+
+### Migrations with more than one container
+
+`MIGRATE_ON_BOOT=true` is a convenience for a single container. When you run separate roles, run migrations as an explicit one-off step instead, and leave `MIGRATE_ON_BOOT` unset:
+
+```sh
+docker run --rm -e DATABASE_URL=postgres://algobridge:change-me@db.example.com:5432/algobridge <image> migrate
+```
+
+The migration takes a database lock, so two runs at once queue rather than collide, and it is safe to run more than once. A `web` or `worker` container that starts before migrations refuses to boot with a message telling you to run migrate.
+
+### Stopping a container
+
+On `SIGTERM`, a worker stops taking new jobs and lets running ones finish for up to 30 seconds. Give the container more time than that, so it is never killed first:
+
+- Docker Compose: keep `stop_grace_period: 45s` from the reference file. The Compose default is 10 seconds.
+- `docker stop`: use `docker stop --time 45`.
+- Kubernetes: set `terminationGracePeriodSeconds: 45`. The default is 30.
+
+## Upgrade
+
+1. Change `ALGOBRIDGE_VERSION` in `deploy/.env` to the new release.
+2. Run the migrations for the new version before any new `web` or `worker` container starts. With the reference Compose file, `MIGRATE_ON_BOOT=true` does this on start:
+
+    ```sh
+    docker compose -f deploy/docker-compose.yml pull
+    docker compose -f deploy/docker-compose.yml up -d
+    ```
+
+    With separate roles, run `migrate` as a one-off step first, then roll out the containers.
+
+3. Check `/readyz` on the new containers.
+
+A container refuses to start against a platform database that is behind its build, with a message that lists the pending migrations. The reverse is allowed: a container older than the database starts and logs a warning, so a rollback or a rolling upgrade does not cause an outage.
+
+A new version may also change the capture trigger AlgoBridge installs in your client database. In that case each affected mapping's **Apply** panel offers to reinstall change capture; nothing in your database changes until you click it.
+
+## Building from source
+
+This is for contributors and for trying unreleased code. A normal install pulls a release, as above.
+
+From a checkout of the repository, add the build overlay. It builds the image from the `Dockerfile` and tags it `algobridge:dev`:
+
+```sh
+BUILD_COMMIT=$(git rev-parse HEAD) docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.build.yml up -d --build
+```
+
+You still need `ALGOBRIDGE_VERSION` and `POSTGRES_PASSWORD` in `deploy/.env` (any value for the version). `BUILD_COMMIT` is optional. When set, the console's sidebar footer shows the short commit the image was built from.
+
+## Next step
+
+[Run your first sync](first-sync.md).
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/apex-bundle/ -->
+# Install the Apex bundle
+
+This guide installs the AlgoBridge Apex bundle in your org, which the Apex probe and the change notifier need. It then pairs the change notifier, adds the Flows that drive it, and checks that it works.
+
+For how the notifier signs and checks each request, see [How the change notifier works](../concepts/change-notifier.md).
+
+## What the bundle contains
+
+The bundle is plain metadata, not a managed package, so you can read every line before you deploy it. Its source is in `packages/salesforce/apex` in the repository.
+
+| Component | Purpose |
+|---|---|
+| `algobridge_ChangeProbe` | The Apex probe. Read-only: reports, for up to 90 objects, whether each one changed. |
+| `algobridge_Status` | Reports the bundle version and which features are enabled. |
+| `algobridge_NotifierPair` | Receives the one-time pairing from AlgoBridge. |
+| `algobridge_NotifyChange` | The Flow action **AlgoBridge: Notify Change**. |
+| `algobridge_Notifier` | Sends the signed notification to AlgoBridge. |
+| `algobridge_Notifier__c` | Hierarchy custom setting that holds the notifier key. |
+| `algobridge_Instance` | Remote site setting for your AlgoBridge address. |
+| `algobridge_Integration` | Permission set **AlgoBridge Integration**. |
+| Five test classes | One per class above. |
+
+The bundle is version 1.1.0. A bundle older than 1.1.0 has no notifier, and the console disables **Pair notifier** until you deploy again.
+
+## Before you start
+
+- [Salesforce is connected](salesforce-connection.md).
+- The integration user has **Modify All Data**, or **Modify Metadata Through Metadata API Functions**, and **Author Apex**. These are needed to deploy from the console.
+- For the change notifier: `PUBLIC_URL` is an `https://` address that Salesforce can reach.
+
+## Step 1: Deploy the bundle
+
+=== "From the console"
+
+    1. Open **Instance → Connections → Change detection**.
+    2. Click **Deploy bundle**.
+
+    The deploy runs in the background and the panel shows **Deploying…**, then **Deploy succeeded** or **Deploy failed**. It runs only the bundle's five test classes, and it writes the origin of your `PUBLIC_URL` into the remote site setting for you.
+
+    It costs one Metadata API deploy, its status polls, and one status call.
+
+=== "With the Salesforce CLI"
+
+    1. Edit the remote site setting in `force-app` so its URL is your `PUBLIC_URL` origin. It ships as the placeholder `https://instance.invalid`. Don't commit your edit. You can also change it after the deploy in **Setup → Remote Site Settings**.
+    2. Deploy, running only the bundle's tests:
+
+        ```bash
+        cd packages/salesforce/apex
+        sf project deploy start \
+          --source-dir force-app \
+          --target-org <your-org-alias> \
+          --test-level RunSpecifiedTests \
+          --tests algobridge_ChangeProbe_Test \
+          --tests algobridge_Status_Test \
+          --tests algobridge_NotifyChange_Test \
+          --tests algobridge_Notifier_Test \
+          --tests algobridge_NotifierPair_Test
+        ```
+
+!!! note
+    If `PUBLIC_URL` changes later, deploy the bundle again and pair the notifier again, so the remote site and the key match the new address.
+
+## Step 2: Assign the permission set
+
+The deploy doesn't assign the permission set.
+
+1. In Salesforce, open **Setup → Permission Sets → AlgoBridge Integration**.
+2. Click **Manage Assignments** and assign it to the integration user only.
+
+The probe runs with sharing, in user mode, so it sees only what the integration user can read.
+
+## Step 3: Verify
+
+To use the Apex probe, click **Use this source** on the **Apex probe** card. AlgoBridge makes one status call and saves the source only if the bundle reports the expected version with the probe enabled. The card then shows **Verified** and the time.
+
+If you only want the Apex probe, you're done. Continue to pair the change notifier.
+
+## Pair the change notifier
+
+Pairing gives the org a key it uses to sign notifications, and gives AlgoBridge a way to check them.
+
+1. Confirm the bundle is 1.1.0 with the remote site set to your `PUBLIC_URL`, and that the permission set is assigned.
+2. On the **Change notifier** card, click **Pair notifier**.
+
+AlgoBridge sends the org a single-use code that expires in 10 minutes and is never shown. Salesforce calls AlgoBridge back once to collect the key. This costs two API requests, the pairing and a status check. You see *Notifier paired.* and the card shows **Paired, key abk_…, no notification yet**.
+
+## Add the Flows
+
+The notifier is driven by two record-triggered Flows on each synced object. Add them by hand for every object you map.
+
+**Flow 1: saves**
+
+1. In **Setup → Flows**, create a **Record-Triggered Flow** on the object.
+2. Trigger it when **A record is created or updated**, with no entry conditions.
+3. Optimize it for **Actions and Related Records**.
+4. Add an **Action** and pick **AlgoBridge: Notify Change** (category **AlgoBridge**).
+5. Set its input `records` to `{!$Record}`.
+6. Save it with the label `AlgoBridge notify <Object> save` and the API name `algobridge_notify_<Object>_save`.
+7. Activate it.
+
+**Flow 2: deletes**
+
+Repeat the steps with the trigger **A record is deleted**, the label `AlgoBridge notify <Object> delete` and the API name `algobridge_notify_<Object>_delete`.
+
+!!! tip "API names for custom objects"
+    Flow API names can't contain a double underscore, so write `Invoice__c` as `Invoice_c`: `algobridge_notify_Invoice_c_save`.
+
+A Flow on an object you don't sync is harmless: AlgoBridge ignores the notification. Object names match regardless of case.
+
+## Select the change notifier
+
+1. Click **Use this source** on the **Change notifier** card.
+2. AlgoBridge checks the notifier is installed and paired, that `PUBLIC_URL` uses `https`, and that it holds a live key.
+3. Save a record on a synced object in Salesforce. The card's **last notification** time updates and the change arrives in PostgreSQL.
+
+You can watch `notifier_notification_accepted` events in the [Live log](live-log.md).
+
+## Rotate or revoke the key
+
+- **Rotate key** issues a new key for two API requests. The old key keeps working for 24 hours, so in-flight notifications aren't lost. Rotate on a schedule.
+- **Revoke** deletes every key, with no API request. Salesforce keeps sending, and each send is refused until you pair again. Sync falls back to polling. Repeated refusals open the `notifier_auth_failures` alert.
+
+!!! danger "If a key may have leaked"
+    Click **Revoke**, then **Pair notifier**. Don't use **Rotate key**: it keeps the old key working for 24 hours.
+
+Disconnecting Salesforce deletes the keys, so pair again after you connect. A reconnect to the same org keeps them.
+
+## Know the limits
+
+- Saves by the integration user aren't notified. If you reconnect as a different user, pair again.
+- Undelete, merge, cascade delete and deactivated Flows send nothing. The hourly fallback poll and the daily reconciliation sweep catch these.
+- Nothing is sent from batch or future contexts.
+- Each notification is one asynchronous Apex call, from the org's daily allowance and from the transaction's limit of 50 future calls, which your own code shares. The action skips sending when less than 1% of the daily allowance is left.
+- Sends are fire and forget with a 10 second timeout. A missed send is caught by the fallback poll.
+
+## Remove the bundle
+
+1. Deactivate and delete the AlgoBridge Flows.
+2. Click **Revoke** on the **Change notifier** card.
+3. Switch the change source to **Composite polling**.
+4. In Salesforce, delete the bundle's classes, the custom setting, the remote site setting and the permission set.
+
+If you skip step 3, the daily check marks the source unavailable and polling falls back to Composite.
+
+## Troubleshooting
+
+??? failure "Deploy failed"
+    The panel shows the deploy error. The usual causes are a missing Author Apex or Modify Metadata permission on the integration user, or a failing test in the org. Fix the cause and click **Deploy bundle** again.
+
+??? failure "A bundle deploy is already running."
+    A deploy is in progress. Wait for it to finish.
+
+??? failure "The Apex bundle in the org has no notifier."
+    The org has a bundle older than 1.1.0. Deploy the bundle, then pair again.
+
+??? failure "Salesforce refused the pairing."
+    The **AlgoBridge Integration** permission set isn't assigned to the integration user, or the remote site setting doesn't cover your `PUBLIC_URL`. Pairing is also limited to 5 attempts a minute: if you hit the limit, wait a minute. Nothing changed, so fix the cause and pair again.
+
+??? failure "Notifier paired, but the follow-up status check found a problem."
+    The pairing worked but the status call found an issue. The **Change notifier** card shows it once the notifier is the selected source, and selecting it checks again.
+
+??? failure "Notifications stop arriving"
+    Check that the Flows are active, that `PUBLIC_URL` and the remote site still match, and look for `notifier_notification_rejected` in the [Live log](live-log.md). If the log reports `notifier_key_unreadable`, pair again.
+
+## Next steps
+
+- [How the change notifier works](../concepts/change-notifier.md)
+- [Create mappings](mappings.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/change-sources/ -->
+# Choose a change source
+
+This guide helps you pick how AlgoBridge learns that records changed in Salesforce, and switch to that source. The three sources differ in what you install in the org, in how many API requests they spend, and in how quickly a change arrives.
+
+Every source ends in the same place: when an object has changed, AlgoBridge reads the changed records with a paged SOQL query. The source only decides how AlgoBridge finds out *which* objects to read. See [Salesforce to PostgreSQL](../concepts/salesforce-to-postgres.md).
+
+## Before you start
+
+- [Salesforce is connected](salesforce-connection.md).
+- For the Apex probe or the change notifier: an admin who can deploy Apex to the org.
+- For the change notifier: `PUBLIC_URL` is an `https://` address that Salesforce can reach.
+
+## Compare the sources
+
+| | Composite polling | Apex probe | Change notifier |
+|---|---|---|---|
+| Installs in your org | Nothing | The AlgoBridge Apex bundle | The same bundle, plus two Flows per synced object |
+| How it learns about changes | Asks Salesforce on each poll whether each object changed | Asks one class in your org, which checks up to 90 objects per request | Your org tells AlgoBridge which objects changed, as it happens |
+| Requests per poll | One per five objects | One for up to 90 objects | None; one fallback poll an hour |
+| Latency | The poll interval | The poll interval | Near real time |
+| Needs inbound HTTPS to AlgoBridge | No | No | Yes |
+
+Composite polling is the default.
+
+### What each one costs
+
+Daily API requests for 50 synced objects. The range covers poll intervals from 2 to 30 minutes.
+
+| Source | Requests per day | At a 5 minute interval |
+|---|---|---|
+| Composite polling | about 480 to 7,200 | about 2,900 |
+| Apex probe | about 48 to 720 | about 290 |
+| Change notifier | 0 to learn about changes, plus the fallback poll and 1 daily check | about 25 with the Apex probe as fallback |
+
+The change notifier's fallback poll runs once an hour by default. It uses the Apex probe (24 requests a day) when the bundle is installed, or Composite polling (240 a day at 50 objects) otherwise. The notifier also uses one asynchronous Apex execution in your org per transaction that saves a synced object, from the org's daily allowance (the larger of 250,000 or 200 per user licence).
+
+When the org nears its API limit, the budget governor widens every interval by four times, up to an hour, and Composite polling is the first to feel it. See [API budget](../concepts/api-budget.md).
+
+### When to pick each
+
+- **Composite polling** if you can't deploy Apex, or you're trying AlgoBridge out. It works everywhere and needs no inbound access.
+- **Apex probe** for most production orgs. One deploy cuts polling requests by about ten times, needs no per-object setup, and nothing calls into AlgoBridge.
+- **Change notifier** when you need changes within seconds, or need the lowest API use, and AlgoBridge can accept HTTPS requests from Salesforce. You add two Flows by hand for each synced object.
+
+## Switch the change source
+
+1. Open **Instance → Connections** and scroll to **Change detection**.
+2. Read the three cards. Each lists what it installs, what it costs, its benefits and its limitations. The selected card is marked **Selected**.
+3. For the Apex probe or the change notifier, install the bundle: click **Deploy bundle**, then assign the permission set. See [Install the Apex bundle](apex-bundle.md).
+4. For the change notifier, click **Pair notifier** and add the Flows. See [Pair the change notifier](apex-bundle.md#pair-the-change-notifier).
+5. Click **Use this source** on the card you want.
+
+AlgoBridge verifies the source before saving it:
+
+- **Composite polling** has nothing to verify.
+- **Apex probe** makes one status call and checks that the bundle reports the expected version with the probe enabled.
+- **Change notifier** makes the same status call and checks that the notifier is installed and paired, that `PUBLIC_URL` uses `https`, and that this instance holds a live key.
+
+If the check passes you see *Change source saved.* If not, *Nothing was saved. The change source stays as it was.* with the reason.
+
+### Card states
+
+| State | Meaning |
+|---|---|
+| Nothing to verify | Composite polling. |
+| Verified 09:12 | The last check passed at that time. |
+| Not verified yet | No check has run since the source was chosen. |
+| Not installed: deploy the bundle | The bundle is missing or too old. |
+| Not paired | The notifier has no live key. |
+| Paired, key abk_…, last notification 12:40 | The notifier is working. |
+
+## How a failing source is handled
+
+A daily job checks the selected source at 02:20 UTC for one API request. If the source has become unusable, for example because someone deleted the Apex classes, AlgoBridge:
+
+- keeps polling with the next source down (change notifier, then Apex probe, then Composite polling),
+- opens the `sf_change_source` alert,
+- shows on Connections, for example: *Selected: Apex probe. Unavailable since 12:40: … Running on Composite.*
+
+AlgoBridge never changes your selection by itself. Fix the cause, then click **Use this source** again to verify it.
+
+## Watch it in the Live log
+
+These events appear in the [Live log](live-log.md): `sf_change_source_selected`, `sf_change_source_refused`, `sf_change_source_checked`, and for the notifier `notifier_paired`, `notifier_pair_failed`, `notifier_key_rotated`, `notifier_key_revoked`, `notifier_notification_accepted`, `notifier_notification_rejected` and `notifier_notification_not_selected`.
+
+## Troubleshooting
+
+??? failure "Not installed: deploy the bundle"
+    The status call found no bundle, or a bundle older than the one this release expects. Click **Deploy bundle**. See [Install the Apex bundle](apex-bundle.md).
+
+??? failure "The Apex probe reports an object as failed"
+    The probe runs as the integration user, with sharing, in user mode. An object the integration user can't read is reported as failed. Give the user read access to the object, and check the **AlgoBridge Integration** permission set is assigned.
+
+??? failure "AlgoBridge must be reachable over HTTPS: set PUBLIC_URL to an https:// address."
+    The change notifier needs Salesforce to call AlgoBridge. Put AlgoBridge behind HTTPS, set `PUBLIC_URL` to that address, restart, and redeploy the bundle so its remote site matches.
+
+??? failure "This instance holds no live notifier key; pair the notifier again"
+    The notifier keys were revoked or deleted, for example by disconnecting Salesforce. Click **Pair notifier**, then **Use this source**.
+
+??? failure "Changes made by the integration user don't arrive quickly"
+    The change notifier ignores saves made by the integration user, so AlgoBridge's own writes don't echo back. Changes made under that user arrive on the hourly fallback poll instead. Use a dedicated integration user that people don't sign in as.
+
+## Next steps
+
+- [Install the Apex bundle](apex-bundle.md)
+- [How the change notifier works](../concepts/change-notifier.md)
+- [API budget](../concepts/api-budget.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/client-database/ -->
+# Connect the client database
+
+This guide connects your instance to the PostgreSQL database your application uses, the one AlgoBridge syncs with Salesforce. It also covers the privileges the database role needs, how the stored URL is protected, and how to rotate the encryption key.
+
+The client database is separate from AlgoBridge's own platform database (`DATABASE_URL`), which holds the console's state and the job queue. An instance connects exactly one client database.
+
+## Before you start
+
+- **PostgreSQL 15 or later**, reachable from every container.
+- **A database role for AlgoBridge** with the privileges listed below.
+- **Either** `ENCRYPTION_KEY` set on every container, if you'll save the URL on screen, **or** access to set `CLIENT_DATABASE_URL` in your deployment.
+
+## Required privileges
+
+AlgoBridge creates its tables, trigger function and change log in a target schema (`algobridge` by default) when you apply a mapping. The role in the URL needs to:
+
+- **Use the `hstore` extension.** Either the extension is already installed in the database, or the role can create it.
+- **Own the target schema, or be able to create it.** On the first apply, the schema must contain no tables, views or other relations.
+
+If a privilege is missing, the apply fails with a configuration error that names the missing grant. Nothing is changed in the database.
+
+## Choose where the URL lives
+
+| | Connections screen | `CLIENT_DATABASE_URL` |
+|---|---|---|
+| Needs `ENCRYPTION_KEY` | Yes | No |
+| Restart to change | No | Yes |
+| Shown on screen as | Connected on this screen | Set by the deployment (CLIENT_DATABASE_URL) |
+
+If `CLIENT_DATABASE_URL` is set, it wins. The screen can't save or disconnect a connection set by the deployment.
+
+!!! warning
+    Setting `CLIENT_DATABASE_URL` on an instance that already has a URL saved on screen replaces the saved URL on the first check. The saved URL can't be recovered.
+
+## Connect the database
+
+=== "On the Connections screen"
+
+    1. Make sure `ENCRYPTION_KEY` is set on every container. Generate one with:
+
+        ```bash
+        openssl rand -base64 32
+        ```
+
+    2. Open **Instance → Connections**.
+    3. In the **PostgreSQL** panel, enter the **Connection URL**, for example:
+
+        ```text
+        postgres://app_user:change-me@db.example.com:5432/app?sslmode=require
+        ```
+
+    4. Click **Test and connect**.
+
+    AlgoBridge connects with a 5 second timeout and runs `SELECT version()`. If that works, it stores the URL encrypted and shows *PostgreSQL connected. The URL was tested, then stored encrypted.* If it fails, nothing is saved, and the error never contains the password.
+
+=== "As an environment variable"
+
+    1. Set the URL in your deployment's secret store:
+
+        ```bash
+        CLIENT_DATABASE_URL=postgres://app_user:change-me@db.example.com:5432/app?sslmode=require
+        ```
+
+    2. Restart every container.
+
+    The panel reads **Set by the deployment (CLIENT_DATABASE_URL)**. To use a different database, change the variable and restart.
+
+After connecting, the panel shows only the host, port, database, user and SSL mode. The full URL is never shown again.
+
+### Choose an SSL mode
+
+Set `sslmode` in the URL:
+
+| `sslmode` | Effect |
+|---|---|
+| `require` | Encrypts the connection. |
+| `verify-full` | Encrypts, and also checks the server certificate and host name. |
+| not set | No SSL. The panel shows **Driver default**. |
+
+Use `verify-full` when the server has a certificate your containers trust.
+
+## Check the connection
+
+Click **Check connection** to test the stored URL on demand. Each worker also checks it when it starts. The stamp shows:
+
+| Stamp | Meaning |
+|---|---|
+| Not checked | No check has run yet. |
+| Healthy | The last check connected. |
+| Unreachable | The host could not be reached. |
+| Refused | The server refused the login or the database. |
+
+## Replace the URL
+
+1. In the **PostgreSQL** panel, enter the whole new URL in **Replace with a new connection URL**. You can't edit one part of the stored URL.
+2. Click **Test and replace**.
+
+Your mappings are kept. The new database is tested first, and the stored URL changes only if the test passes.
+
+## Disconnect
+
+1. Delete your mappings. Disconnect is refused while any exist.
+2. Click **Disconnect**, then **Disconnect PostgreSQL** in the dialog.
+
+The stored URL is deleted and sync stops. Your tables and data stay in the database.
+
+## Rotate the encryption key
+
+`ENCRYPTION_KEY` protects every secret AlgoBridge stores: the client database URL, the Salesforce tokens, app credentials saved on screen, and change notifier secrets. To rotate it without losing any of them:
+
+1. Generate a new key:
+
+    ```bash
+    openssl rand -base64 32
+    ```
+
+2. On every container, move the current key to `ENCRYPTION_KEY_PREVIOUS` and put the new key in `ENCRYPTION_KEY`. Restart. AlgoBridge can now read secrets written with either key.
+3. Re-encrypt the stored secrets with the new key:
+
+    ```bash
+    docker compose -f deploy/docker-compose.yml run --rm app rotate-encryption-key
+    ```
+
+    Outside Docker, run `node dist/cli/rotate-encryption-key.js`. The command re-encrypts everything in one transaction and prints:
+
+    ```text
+    Re-encrypted N stored secret(s) with key <id>. You can now remove ENCRYPTION_KEY_PREVIOUS.
+    ```
+
+    The key id is the first 8 hex characters of the key's SHA-256 hash, so you can tell keys apart without printing them.
+
+4. Remove `ENCRYPTION_KEY_PREVIOUS` from every container and restart.
+
+`ENCRYPTION_KEY_PREVIOUS` is refused at startup unless `ENCRYPTION_KEY` is also set, and the two must differ.
+
+## Deleting rows in synced tables
+
+AlgoBridge doesn't sync `TRUNCATE`. Truncating a read-write table deletes nothing in Salesforce. It also clears the `algobridge_lastop` and `algobridge_err` status columns. To delete records in Salesforce from PostgreSQL, use `DELETE`, in batches for large sets.
+
+## Troubleshooting
+
+??? failure "This is AlgoBridge's own database. Connect your application's database instead."
+    The URL points at the platform database, which holds the `algobridge_jobs` schema and the `algobridge_migrations` table. Use the URL of your application's database.
+
+??? failure "Set ENCRYPTION_KEY to store a connection."
+    Saving on screen needs an encryption key. Set `ENCRYPTION_KEY` on every container and restart, or set `CLIENT_DATABASE_URL` instead.
+
+??? failure "Enter a URL like postgres://user:password@host:5432/database."
+    The URL could not be parsed. Check the scheme, and percent-encode special characters in the password.
+
+??? failure "AlgoBridge could not connect with this URL."
+    The test connection failed within 5 seconds. Check the host, port, firewall rules, credentials and SSL mode from inside a container. Nothing was saved.
+
+??? failure "CLIENT_DATABASE_URL sets this connection. Change it in the deployment."
+    The deployment sets the URL, so the screen can't change it. Edit the variable and restart.
+
+??? failure "Delete your mappings first."
+    Disconnect is refused while mappings exist. Delete them on **Sync → Mappings** first.
+
+??? failure "Apply fails with a missing privilege"
+    The role can't create the `hstore` extension, or doesn't own the target schema, or the schema already holds other relations on the first apply. Grant what the message names, or install `hstore` as a superuser, then apply again.
+
+## Next steps
+
+- [Choose a change source](change-sources.md)
+- [Create mappings](mappings.md)
+- [Security](../concepts/security.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/ -->
+# Guides
+
+Task-by-task instructions for setting up and running AlgoBridge. If you're new, start with [Install](../getting-started/install.md) and [Your first sync](../getting-started/first-sync.md), then come back here for the details.
+
+## Connect the two ends
+
+- [Connect Salesforce](salesforce-connection.md): create the External Client App, sign in as the integration user, and reconnect when authentication fails.
+- [Connect the client database](client-database.md): connect your application's PostgreSQL database, grant the privileges it needs, and rotate the encryption key.
+
+## Detect changes in Salesforce
+
+- [Choose a change source](change-sources.md): compare Composite polling, the Apex probe and the change notifier by API cost and latency, and switch between them.
+- [Install the Apex bundle](apex-bundle.md): deploy the bundle, assign its permission set, pair the change notifier and add its Flows.
+
+## Sync data
+
+- [Create mappings](mappings.md): choose objects and fields, create the tables and triggers, run the initial load, and reload a table.
+
+## Manage access
+
+- [Set up sign-in](sso.md): local passwords with two-step verification, and single sign-on through Google, Microsoft or any OpenID Connect provider.
+- [Manage users and roles](users-and-roles.md): create the first admin, invite people, and choose between the viewer, member and admin roles.
+
+## Operate the instance
+
+- [Read the Live log](live-log.md): watch every query and call as it happens, and filter by level, source, process and mapping.
+- [Run workers and jobs](workers-and-jobs.md): split web and worker containers, scale workers, stop them safely, and handle dead letter jobs.
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/live-log/ -->
+# Read the Live log
+
+The Live log streams log lines from every AlgoBridge process into your browser as they happen. Use it to watch a sync step by step: each SOQL query, each Salesforce and PostgreSQL call, and each job, without access to the container logs.
+
+The Live log keeps no history. Lines exist only in the open tab, so there is nothing to back up, export or purge. For the record of what synced, use **Sync → Activity**.
+
+## Before you start
+
+- You need the **admin** role (the `logs.view` permission). See [Users and roles](users-and-roles.md).
+- JavaScript must be on for the console. Without it, the page says *The Live log needs JavaScript.*
+
+## Open the Live log
+
+1. Open **Instance → Live log**. You can also click **Open live log** on **Instance → Jobs & workers**.
+2. The state pill in the page head changes from **Connecting** to following the stream, and lines start to arrive.
+
+While at least one tab is open, every process in the deployment raises its log level to debug within about 5 seconds, so the tab shows every query and call, not only the lines your `LOG_LEVEL` normally keeps. When the last tab closes, the processes drop back within about 10 seconds.
+
+Your container logs are not affected. Stdout always carries lines at `LOG_LEVEL`, whether anyone is watching or not.
+
+!!! info "What it costs"
+    The Live log makes no Salesforce API calls. Each open tab holds one streaming connection to the web process and one connection to the platform database. Up to 5 people can watch at once; a sixth tab is told how many are already open and gets no stream. Allow one extra platform-database connection per admin who might watch.
+
+## Read a line
+
+Each line shows the time, the level, the source, the process it came from and the message. Select a line to see its details, such as rows read, API calls made and how long the step took. Where a line belongs to a mapping or a job, the details link to **Open mapping** or **Open Jobs & workers**.
+
+### Levels
+
+| Level | Shows |
+|---|---|
+| **Error** | Errors and fatal errors. |
+| **Warn** | Warnings. |
+| **Info** | Normal progress. |
+| **Debug** | Debug and trace detail: every query, call and queue step. |
+
+### Sources
+
+| Source | Shows |
+|---|---|
+| **SOQL** | Salesforce queries. |
+| **Salesforce** | Other Salesforce calls: writes, Bulk jobs, status checks. |
+| **PostgreSQL** | Calls to the client database. |
+| **Queue** | Job engine activity: jobs, ticks, queues, the watchdog and worker registration. |
+| **Web** | The console's web process. |
+| **Worker** | The sync worker. |
+
+## Filter the lines
+
+Filters run in your browser and change only what you see. They don't change what the processes send.
+
+- **Level** and **Source**: click a toggle to hide or show those lines. Each level toggle shows how many lines it holds.
+- **Process**: show lines from one process, or **All processes**.
+- **Mapping**: show lines for one mapping, or **All mappings**.
+- **Search lines**: show only lines containing your text.
+
+If nothing matches, the tab says *No lines match these filters. Matching lines appear here as they happen.*
+
+## Follow, pause and copy
+
+- The tab follows the newest line. Scroll back to stop following; **Jump to latest** takes you back.
+- **Pause** freezes the view while lines keep arriving in the background. Click **Resume** to catch up.
+- **Copy lines** copies the lines you see, or the lines you selected.
+- **Clear** empties the tab.
+
+The tab keeps the newest 2,000 lines. Older lines are dropped from the tab as new ones arrive.
+
+## What is hidden
+
+- Values in SOQL string literals are masked as `'…'`, except values shaped like record IDs.
+- Secrets such as tokens, passwords and keys are replaced with `[redacted]`.
+
+## Troubleshooting
+
+??? failure "The stream dropped"
+    The tab shows *Reconnecting* and tries again by itself. Once it is back, a *Disconnected at … UTC* mark shows where lines may be missing. Streams are also renewed every 10 minutes, which you may notice as a brief reconnect.
+
+??? failure "The Live log could not connect."
+    The web process or the platform database didn't accept the stream. Check that the web container is healthy, and click **Try again**. If your session expired, sign in again.
+
+??? failure "Five people are already watching"
+    The viewer limit is reached. Close a Live log tab elsewhere, or wait for someone else to close theirs.
+
+??? failure "Lines are missing during a busy sync"
+    When more than 1,000 lines are waiting to be sent, AlgoBridge drops lines from the stream and logs a `live_log_lines_dropped` warning. The container logs are not affected, so check them for lines at your `LOG_LEVEL`.
+
+??? failure "I only see info lines"
+    The level rises to debug within about 5 seconds of the tab opening. Wait a moment, and check that the **Debug** toggle is on.
+
+## Next steps
+
+- [Workers and jobs](workers-and-jobs.md)
+- [Architecture](../concepts/architecture.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/mappings/ -->
+# Create mappings
+
+A mapping syncs one Salesforce object with one PostgreSQL table. This guide shows you how to choose the object and its fields, create the table, run the initial load, and reload a table when you need a fresh copy.
+
+## Before you start
+
+- [Salesforce is connected](salesforce-connection.md) and [the client database is connected](client-database.md). Until both are, **Sync → Mappings** shows *Connect Salesforce and PostgreSQL first*.
+- Your user has the **member** or **admin** role. See [Users and roles](users-and-roles.md).
+- The database role can create the target schema and use `hstore`. See [Required privileges](client-database.md#required-privileges).
+
+## Step 1: Check the mapping settings
+
+The **Settings** panel on **Sync → Mappings** applies to every mapping.
+
+- **Target schema**: the PostgreSQL schema AlgoBridge creates tables in. The default is `algobridge`. You can change it only until the first mapping exists. It must be a valid lowercase identifier (letters, digits and underscores, up to 63 characters) and can't be `public`, `information_schema` or start with `pg_`.
+- **Write algorithm**: how changes from PostgreSQL are sent to Salesforce. **Ordered Writes (recommended)** sends captured changes in order, one at a time, so a failed insert holds back only that record and rows that reference it. **Merged Writes** merges several changes to one record before sending, and sends parents ahead of children. See [PostgreSQL to Salesforce](../concepts/postgres-to-salesforce.md).
+
+Click **Save** after changing either.
+
+## Step 2: Choose an object
+
+1. Click **New mapping**.
+2. Search the list of objects, then click **Choose** on the one you want.
+
+The list shows objects that can be queried and replicated, as of the time shown. Click **Refresh** if you've just created an object in Salesforce. Big objects (`__b`), platform events (`__e`) and external objects (`__x`) aren't listed. An object without a `SystemModstamp` field is shown as one that can't be synced, because AlgoBridge uses that field to find changed records.
+
+## Step 3: Set direction and conflicts
+
+- **Direction**:
+    - **Read-only** (the default): Salesforce changes sync to PostgreSQL. PostgreSQL never writes back.
+    - **Read-write**: changes also flow from PostgreSQL to Salesforce.
+- **Conflict policy**, for read-write mappings only: **Salesforce wins** (the default), **PostgreSQL wins**, or **Latest change wins**. See [Conflicts](../concepts/conflicts.md).
+- **Poll interval**: set the fastest and slowest interval, between 2 and 60 minutes. The defaults are 5 and 30. While the object is quiet, the interval doubles after each poll that finds nothing, up to the slowest. A poll that finds a change resets it to the fastest.
+- **External ID**: for a read-write mapping, choose a Salesforce field that is marked both External ID and Unique. AlgoBridge uses it to match rows inserted in PostgreSQL to records, so a retried insert can't create a duplicate. Leaving it at **None** works, but the editor warns you about the risk.
+
+## Step 4: Choose fields
+
+The fields table lists each field's label, API name, Salesforce type and the PostgreSQL column type it becomes. Tick **Sync** for each field you want, and tick **Indexed** to add an index on its column.
+
+- `Id` becomes the `sfid` column. `Id` and `SystemModstamp` are always synced and can't be unticked. `IsDeleted` is added for you.
+- `CreatedDate` and `Name` are ticked by default.
+- Column names are the field's API name in lowercase, for example `billingcity` or `invoice_total__c`.
+- For a lookup, you can sync a field of the related record through its relationship. The column is named `<relationship>__r__<field>`, for example `account__r__external_id__c`. Polymorphic lookups don't offer this.
+- Column names longer than 63 bytes, a column named `id`, and any name starting with `algobridge_` are refused.
+
+### Field types
+
+| Salesforce type | PostgreSQL type |
+|---|---|
+| id, reference | `varchar(18)` |
+| string, url, email, phone, encryptedstring | `varchar(length)` |
+| picklist | `varchar(255)` |
+| combobox | `varchar(length)` |
+| multipicklist | `varchar(4099)` |
+| textarea | `varchar(length)` under 256, otherwise `text` |
+| boolean | `boolean` |
+| int | `integer` |
+| long | `bigint` |
+| double, currency, percent | `numeric(precision, scale)` |
+| date | `date` |
+| datetime | `timestamptz` |
+| time | `time` |
+| anyType | `text` |
+
+Compound fields (address, location) and base64 fields can't be selected. Sync their component fields instead, such as `BillingCity`.
+
+### What is not synced
+
+**Formula fields are not synced.** The editor lists them greyed out as *Formula field — not synced*, and a mapping that includes one is refused. Salesforce doesn't mark a record changed when only a formula's inputs change, so no polling source can keep a formula column correct. Compute the value in PostgreSQL instead, for example with a view or a generated column over the synced input fields.
+
+The editor also warns you about:
+
+- more than 100 fields on one mapping,
+- encrypted fields, which may arrive masked if the integration user can't see them unmasked,
+- a lookup whose target object isn't mapped,
+- fields that changed in Salesforce since the mapping was saved, which are flagged **Removed from Salesforce** when they were deleted.
+
+## Step 5: Save, then apply
+
+1. Click **Create mapping**, or **Save changes** on an existing mapping. Saving changes nothing in your database.
+2. Review the **Apply** panel. It lists the exact statements AlgoBridge will run.
+3. Click **Create table** for a new mapping, or **Apply changes** for an edit.
+
+A worker runs the statements in one transaction: if any of them fails, none of them stick, and the mapping shows **failed** with the statement that failed.
+
+For every mapping, applying creates:
+
+- the target schema, if it doesn't exist,
+- the table, with a unique index on `sfid`, a unique index on the External ID column, and an index on each **Indexed** column.
+
+For a read-write mapping, it also creates:
+
+- the `hstore` extension,
+- the change log table `algobridge_change_log`, and an archive kept for 30 days,
+- the trigger function `algobridge_capture_change()` and a trigger `algobridge_capture` on the table,
+- the status columns `algobridge_lastop` and `algobridge_err`.
+
+Applying never drops or recreates a table, and never drops a column. A type change that would narrow a column is refused.
+
+### Mapping states
+
+| State | Meaning |
+|---|---|
+| draft | Saved, not applied yet. |
+| provisioning | Apply is running. |
+| active | Syncing. |
+| paused | Sync is stopped for this mapping. |
+| failed | The last apply failed. The panel shows why. |
+
+## Step 6: Watch the initial load
+
+When a mapping first becomes active, AlgoBridge loads every record of the object into the table.
+
+It first counts the records, then picks the cheaper way to read them:
+
+- **REST queries** cost one request per 2,000 records.
+- **Bulk API 2.0** costs about 5 requests plus one per 50,000 records.
+
+Bulk is used only when it is strictly cheaper, so small objects load over REST. If Salesforce refuses a Bulk job, the load falls back to REST.
+
+The mapping list shows progress, such as **Loading 42%**, and the mapping's **Load** panel shows rows read and the transport chosen. If the org is close to its API limit, the load waits and shows **Waiting for API budget**.
+
+Adding fields to an active mapping works the same way: after you apply, the **Load** panel lists the new columns waiting to load and fills them from Salesforce.
+
+To stop a load, click **Stop load**. Stopping keeps what has been read so far, and the panel shows *Table may be incomplete — run Reload to finish.*
+
+## Reload a table
+
+**Reload** empties the table and reads the whole object again. Use it after stopping a load, or when you want the table to match Salesforce exactly.
+
+1. Open the mapping and click **Reload** in the **Load** panel.
+2. The dialog shows how many rows the table holds. Type the table name to confirm.
+3. Click **Reload table**.
+
+Before you reload, know that:
+
+- Salesforce wins. Changes made in PostgreSQL that haven't been sent yet are discarded, and rows with no `sfid` (inserted in PostgreSQL but not yet in Salesforce) are lost.
+- AlgoBridge runs `TRUNCATE … RESTART IDENTITY` inside the job. It never drops the table.
+- If another table has a foreign key to this one, Reload is refused. AlgoBridge never truncates with `CASCADE`.
+
+## Daily reconciliation
+
+Once a day, at the hour set by `reconcile_hour_utc` (03:00 UTC by default), AlgoBridge compares every mapping with Salesforce using one Bulk query per mapping, about 5 requests each. Salesforce wins, and records deleted in Salesforce are deleted from the table. The sweep is deferred while the budget governor is slowing or pausing sync.
+
+## Remove fields or a mapping
+
+- **Remove fields**: untick them and save. The dialog *Stop syncing these fields?* reminds you that the columns and their data stay in PostgreSQL and simply stop being written. Click **Stop syncing and save**.
+- **Delete a mapping**: click **Delete mapping**. Choose **Keep the table**, or **Drop the table and everything in it** and type the table name to confirm.
+
+## Troubleshooting
+
+??? failure "Someone else changed this mapping. Reload to see their changes."
+    Another user saved the mapping after you opened it. Reload the page, check their changes, and make yours again.
+
+??? failure "Apply failed"
+    The panel shows the statement that failed. The usual cause is a missing privilege on the client database, or a schema that already holds other tables on the first apply. See [Required privileges](client-database.md#required-privileges).
+
+??? failure "Reload is refused because of a foreign key"
+    Another table references this one. Drop or defer the foreign key, reload, then restore it.
+
+??? failure "The load stays on Waiting for API budget"
+    The org's API usage is above the governor's threshold. The load continues once usage falls. See [API budget](../concepts/api-budget.md).
+
+??? failure "A field I need is greyed out"
+    It is a formula field, a compound field, or a base64 field. See [What is not synced](#what-is-not-synced).
+
+## Next steps
+
+- [Your first sync](../getting-started/first-sync.md)
+- [Salesforce to PostgreSQL](../concepts/salesforce-to-postgres.md)
+- [PostgreSQL to Salesforce](../concepts/postgres-to-salesforce.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/salesforce-connection/ -->
+# Connect Salesforce
+
+This guide connects your instance to one Salesforce org. You create an External Client App in Salesforce, give AlgoBridge its credentials, and sign in once as the integration user. After that, AlgoBridge refreshes its own tokens.
+
+An instance connects exactly one org. To sync a second org, run a second instance.
+
+## Before you start
+
+- **`ENCRYPTION_KEY` is set** on every container (web and worker). AlgoBridge stores the OAuth tokens, and any app credentials saved on screen, encrypted with this key. Generate one with `openssl rand -base64 32`. See [Configuration](../getting-started/configuration.md).
+- **`PUBLIC_URL` is set** to the address your browser uses to reach the console, for example `https://sync.example.com`. The OAuth callback is built from it.
+- **You have a dedicated integration user** in Salesforce. AlgoBridge signs in as this user and every call it makes runs as them. A dedicated user keeps the audit trail clear and matters later if you use the [change notifier](change-sources.md), which ignores the integration user's own saves.
+- **You can create apps in Setup** in the org.
+
+## Choose where the app credentials live
+
+The app's consumer key and secret can come from the console or from the deployment.
+
+| | Connections screen | Environment variables |
+|---|---|---|
+| Where they're stored | Encrypted in the platform database | Your deployment's secret store |
+| How to change them | **Replace** on screen | Change the variables and restart |
+| Shown on screen as | Saved on this screen | Set by the deployment (SALESFORCE_CLIENT_ID) |
+
+If both are set, the environment variables win.
+
+## Step 1: Create the External Client App
+
+1. In Salesforce, open **Setup → External Client App Manager** and create a new app.
+2. Name it `AlgoBridge` and enter a contact email.
+3. Turn on **Enable OAuth**.
+4. Set the **Callback URL** to your `PUBLIC_URL` followed by `/connections/salesforce/callback`, for example:
+
+    ```text
+    https://sync.example.com/connections/salesforce/callback
+    ```
+
+    The Connections screen shows this exact URL with a **Copy** button.
+
+5. Add these OAuth scopes:
+    - **Manage user data via APIs (api)**
+    - **Perform requests at any time (refresh_token, offline_access)**
+6. Turn on **Require PKCE**.
+7. Leave **Require secret for Web Server Flow** on.
+8. Set the refresh token policy to **valid until revoked**. Rotating refresh tokens also works: AlgoBridge refreshes under a database row lock, so two processes never race for the same token.
+9. Save the app, then copy its **Consumer Key** and **Consumer Secret**.
+
+!!! note
+    A new app can take a few minutes before Salesforce accepts sign-ins to it. If the first connect fails with a credentials error, wait and try again.
+
+## Step 2: Give AlgoBridge the app credentials
+
+=== "On the Connections screen"
+
+    1. In the console, open **Instance → Connections**.
+    2. In the **Salesforce** panel, paste the **Consumer key** and **Consumer secret**.
+    3. Click **Save app credentials**.
+
+    The secret is stored encrypted and never shown again. To change it later, click **Replace**. **Remove app credentials** is available only after you disconnect the org.
+
+=== "As environment variables"
+
+    1. Set both variables in your deployment's secret store:
+
+        ```bash
+        SALESFORCE_CLIENT_ID=change-me
+        SALESFORCE_CLIENT_SECRET=change-me
+        ```
+
+        Set them together. The app refuses to start if only one is set.
+
+    2. Restart every container.
+
+    The panel now reads **Set by the deployment (SALESFORCE_CLIENT_ID)**. To use a different app, change both variables and restart.
+
+## Step 3: Connect the org
+
+1. In the **Salesforce** panel, enter your **My Domain URL**:
+    - Production: `https://yourcompany.my.salesforce.com`
+    - Sandbox: `https://yourcompany--sandbox.sandbox.my.salesforce.com`
+2. Click **Connect to Salesforce**.
+3. Salesforce opens. Sign in as the integration user and allow access.
+4. You return to Connections with the notice *Salesforce connected. Tokens are stored encrypted.*
+
+The panel now shows the org, its My Domain and org ID, the user AlgoBridge runs as, the instance, the API version, when tokens were last refreshed, and **API usage today**.
+
+!!! info "API cost"
+    Token requests, token revokes and identity lookups don't count against the org's daily API limit. **Check connection** costs one API call: it reads the org's record and the current usage that Salesforce reports with the response. See [API budget](../concepts/api-budget.md).
+
+## Check the connection
+
+Click **Check connection** at any time to confirm the tokens still work and to refresh the usage figures. The panel stamp shows one of these states:
+
+| Stamp | Meaning |
+|---|---|
+| Not connected | No org is connected yet. |
+| Connected | The tokens work. |
+| App changed | The app credentials changed after the org was authorized. Reconnect to issue tokens to the new app. |
+| Reconnect needed | Salesforce refused the stored tokens. |
+
+## Reconnect when authentication fails
+
+Salesforce stops accepting the refresh token when it is revoked, when it expires under the app's policy, or when you change the app credentials. Sync then stops with an authentication error and the panel shows **Reconnect needed** or **App changed**.
+
+1. Open **Instance → Connections**.
+2. Click **Reconnect** in the Salesforce panel.
+3. Sign in as the same integration user, in the same org, and allow access.
+
+You see *Salesforce reconnected. New tokens are stored encrypted.* Your mappings, and a paired change notifier, are kept, because the org is the same.
+
+AlgoBridge refuses a reconnect that signs in to a different org. To change orgs, disconnect first.
+
+## Disconnect
+
+1. Delete your mappings. Disconnect is refused while any exist.
+2. Click **Disconnect**, then **Disconnect Salesforce** in the dialog.
+
+AlgoBridge revokes the refresh token in Salesforce and deletes both stored tokens. Any change notifier keys are deleted too, so you must pair again after connecting.
+
+## Troubleshooting
+
+??? failure "Salesforce shows `redirect_uri_mismatch`"
+    The callback URL in the app doesn't match the one AlgoBridge sends. Copy the URL from the Connections screen into the app exactly. It must use `https` and have no trailing slash. Check that `PUBLIC_URL` matches the address you use in the browser.
+
+??? failure "Salesforce rejected the consumer key or secret."
+    The key or secret is wrong, or the app is not usable yet. Copy both again from the app, click **Replace**, and wait a few minutes if the app is new.
+
+??? failure "The app must allow the refresh_token scope"
+    Add **Perform requests at any time (refresh_token, offline_access)** to the app's OAuth scopes and connect again.
+
+??? failure "This connect link expired. Start again."
+    More than 10 minutes passed between clicking **Connect to Salesforce** and returning, or the link was already used. Click the button again.
+
+??? failure "You signed in to a different org. Disconnect first to change orgs."
+    You signed in to an org other than the connected one. Sign in to the original org, or delete your mappings, disconnect and connect the new org.
+
+??? failure "Delete your mappings first."
+    Disconnect is refused while mappings exist. Delete them on **Sync → Mappings**, then disconnect.
+
+??? failure "Could not reach Salesforce."
+    The container has no outbound HTTPS route to Salesforce, or Salesforce is unavailable. Check outbound network access and try again.
+
+??? failure "Salesforce disconnected, but Salesforce didn't confirm the revoke"
+    AlgoBridge deleted its tokens, but Salesforce didn't confirm the revoke. Revoke the token by hand in **Setup → Connected Apps OAuth Usage**.
+
+??? failure "The connection changed while you were confirming. Check it and try again."
+    Someone else changed the connection while your dialog was open. Reload the page and repeat the action.
+
+## Next steps
+
+- [Connect the client database](client-database.md)
+- [Choose a change source](change-sources.md)
+- [Create mappings](mappings.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/sso/ -->
+# Set up sign-in
+
+This guide sets up how people sign in to the console: AlgoBridge passwords with optional two-step verification, single sign-on through Google Workspace, Microsoft Entra ID, or any standard OpenID Connect provider, or a mix of them.
+
+Sign-in is configured with environment variables, so each change needs a restart.
+
+## Before you start
+
+- **`PUBLIC_URL` is set** to the address people use, for example `https://sync.example.com`. Redirect URIs are built from it.
+- **At least one admin exists.** See [Create the first admin](users-and-roles.md#create-the-first-admin).
+- For SSO: admin access to your identity provider, so you can register an application.
+
+## How the settings fit together
+
+| Variable | What it does |
+|---|---|
+| `AUTH_PROVIDERS` | Comma-separated list of sign-in methods: `local`, `google`, `microsoft`, `oidc`. For example `local,google`. Each SSO provider listed gets its own button. |
+| `AUTH_LOCAL_LOGIN` | Who may sign in with an AlgoBridge password: `all` (the default), `admins` or `off`. |
+| `AUTH_ALLOWED_DOMAINS` | Optional. Email domains allowed to sign up on their first SSO sign-in, without an invite. |
+
+Rules that AlgoBridge checks at startup:
+
+- `local` must be in `AUTH_PROVIDERS` unless `AUTH_LOCAL_LOGIN=off`.
+- `AUTH_LOCAL_LOGIN=off` needs at least one SSO provider.
+- Each SSO provider's variables are required together. A deployment missing any of them refuses to start, so a half-configured provider can't go live.
+
+## Local passwords and two-step verification
+
+Local sign-in is on by default. Passwords are hashed with argon2id. There is no self-service "forgot password": an admin issues a set-password link from the **Users** page.
+
+Two-step verification is optional and applies to local passwords only. It needs `ENCRYPTION_KEY` set, because the authenticator key is stored encrypted. Each person turns it on for themselves:
+
+1. Click your name at the top of the console to open **Account**.
+2. Under **Two-step verification**, click **Set up**.
+3. Scan the QR code with an authenticator app, or enter the key by hand. The key is shown once.
+4. Enter the 6-digit code the app shows and click **Turn on**.
+
+From then on, signing in asks for a code after the password. If someone loses their authenticator, an admin can turn two-step verification off for them on the **Users** page.
+
+## Add a single sign-on provider
+
+The redirect URI for each provider is `PUBLIC_URL` followed by `/auth/callback/<provider>`. It must match exactly.
+
+=== "Google"
+
+    Google sign-in accepts accounts from one Google Workspace domain.
+
+    1. In the Google Cloud console, open **APIs & Services → OAuth consent screen** and set **User type** to **Internal**. This limits sign-in to your Workspace organization before AlgoBridge sees a login.
+    2. Open **APIs & Services → Credentials → Create credentials → OAuth client ID**.
+    3. Choose **Application type: Web application**.
+    4. Under **Authorized redirect URIs**, add:
+
+        ```text
+        https://sync.example.com/auth/callback/google
+        ```
+
+    5. Save, and copy the **Client ID** and **Client secret**.
+    6. Set these variables and restart:
+
+        ```bash
+        AUTH_PROVIDERS=local,google
+        GOOGLE_CLIENT_ID=change-me
+        GOOGLE_CLIENT_SECRET=change-me
+        GOOGLE_HOSTED_DOMAIN=example.com
+        ```
+
+    AlgoBridge checks Google's hosted-domain (`hd`) claim on every sign-in and accepts only `GOOGLE_HOSTED_DOMAIN`. Personal Gmail accounts never carry it, so they're always refused.
+
+=== "Microsoft"
+
+    Microsoft sign-in accepts accounts from one Entra ID tenant.
+
+    1. In the Entra admin center, open **Identity → Applications → App registrations → New registration**.
+    2. Choose **Accounts in this organizational directory only (Single tenant)**.
+    3. Under **Redirect URI**, choose platform **Web** and enter:
+
+        ```text
+        https://sync.example.com/auth/callback/microsoft
+        ```
+
+    4. Open **Certificates & secrets → New client secret**. Copy the value, which is shown once, and note its expiry date. Rotate it before it expires, or sign-in stops working.
+    5. From the app's **Overview**, copy the **Application (client) ID** and the **Directory (tenant) ID**.
+    6. Open **Token configuration → Add optional claim**, choose token type **ID**, and add `email` and `xms_edov`.
+    7. Set these variables and restart:
+
+        ```bash
+        AUTH_PROVIDERS=local,microsoft
+        MICROSOFT_CLIENT_ID=change-me
+        MICROSOFT_CLIENT_SECRET=change-me
+        MICROSOFT_TENANT_ID=00000000-0000-0000-0000-000000000000
+        ```
+
+    `MICROSOFT_TENANT_ID` must be your tenant's GUID. `common`, `organizations` and `consumers` are refused at startup, because they would admit accounts from any tenant.
+
+    !!! warning "Don't skip the optional claims"
+        Entra's `email` claim alone isn't guaranteed to be verified. AlgoBridge trusts it only with `xms_edov: true`. Without both claims, an invited user's first Microsoft sign-in is refused, because there is no verified email to match the invite.
+
+=== "Generic OIDC"
+
+    Use this for Okta, Keycloak, Auth0 or any other standard OpenID Connect provider. The provider must support:
+
+    - discovery at `<issuer>/.well-known/openid-configuration`,
+    - the authorization code flow with PKCE (S256),
+    - ID tokens with `email` and `email_verified`, where `email_verified` is the boolean `true`. A string `"true"` counts as unverified.
+
+    1. In your provider, create an OIDC web application and register this redirect URI:
+
+        ```text
+        https://sync.example.com/auth/callback/oidc
+        ```
+
+    2. Note the issuer URL, client ID and client secret. Typical issuer URLs:
+
+        | Provider | Issuer URL |
+        |---|---|
+        | Okta | `https://example.okta.com/oauth2/default` |
+        | Keycloak | `https://<keycloak-host>/realms/<realm-name>` |
+        | Auth0 | `https://<your-tenant>.auth0.com/` |
+
+    3. Set these variables and restart:
+
+        ```bash
+        AUTH_PROVIDERS=local,oidc
+        OIDC_ISSUER=https://example.okta.com/oauth2/default
+        OIDC_CLIENT_ID=change-me
+        OIDC_CLIENT_SECRET=change-me
+        OIDC_DISPLAY_NAME=Okta
+        OIDC_ALLOWED_EMAIL_DOMAINS=example.com
+        ```
+
+    `OIDC_ISSUER` must use `https`. The button reads **Continue with** followed by `OIDC_DISPLAY_NAME`.
+
+    Set `OIDC_ALLOWED_EMAIL_DOMAINS` to the domains you control. A generic provider might assert a verified email for a domain it doesn't own, and this list limits which emails can link to an account or sign up. Matching is exact: a subdomain isn't covered.
+
+You can list several providers at once, for example `AUTH_PROVIDERS=local,google,oidc`. The sign-in page shows one button per provider.
+
+## Limit password sign-in
+
+Once SSO works, set:
+
+```bash
+AUTH_LOCAL_LOGIN=admins
+```
+
+This is the recommended setting with SSO. Only admins can still sign in with a password, as a break-glass path. Everyone else uses the provider button. A non-admin's correct password is refused.
+
+`AUTH_LOCAL_LOGIN=off` removes the password form entirely.
+
+The `create-admin` command and admin-issued set-password links keep working in every mode, including `off`.
+
+## How accounts are matched
+
+People sign in through SSO with an account that already exists in AlgoBridge:
+
+- **Invited users** are matched by verified email on their first SSO sign-in. Invite them on the **Users** page first.
+- **Existing password accounts** with the same verified email are linked on the first SSO sign-in from that provider, including accounts with two-step verification on. After that, the account accepts either way of signing in. SSO sign-ins never ask for a two-step code: the provider's own sign-in security stands in for it.
+- **Just-in-time sign-up**: if the person has no account and their email domain is in `AUTH_ALLOWED_DOMAINS`, AlgoBridge creates one with the **viewer** role.
+
+!!! warning
+    If you have password accounts you don't want linked to SSO, disable or rename them before you turn a provider on.
+
+## Troubleshooting
+
+These notices appear on the sign-in page.
+
+??? failure "That account is not part of the organization this console accepts."
+    Google: the `hd` claim was missing or didn't match `GOOGLE_HOSTED_DOMAIN`, usually a personal account. Microsoft: the token's tenant didn't match `MICROSOFT_TENANT_ID`. Generic OIDC: the email domain isn't in `OIDC_ALLOWED_EMAIL_DOMAINS`.
+
+??? failure "Your identity provider did not confirm your email address…"
+    The ID token had no verified email. For Microsoft, add the `email` and `xms_edov` optional claims. For generic OIDC, request the `email` scope and check that the provider sends `email_verified` as a boolean.
+
+??? failure "Your account is not set up in AlgoBridge yet."
+    No user is invited with this email, and `AUTH_ALLOWED_DOMAINS` doesn't cover it. An admin can invite the person on the **Users** page.
+
+??? failure "This account is disabled."
+    An admin can enable the account on the **Users** page.
+
+??? failure "This AlgoBridge account is already linked to a different sign-in from that provider."
+    The AlgoBridge account is already tied to another identity from the same provider. An admin has to resolve this; unlinking isn't self-service yet.
+
+??? failure "Sign-in with your identity provider did not complete."
+    The provider returned an error, for example because consent was denied. Try again, and check the application settings in the provider if it persists.
+
+??? failure "Your sign-in took too long or was already used."
+    More than 10 minutes passed, or the sign-in was already completed once. Click the provider button again.
+
+??? failure "Your identity provider could not be reached."
+    AlgoBridge couldn't reach the provider's discovery or token endpoint. Wait and try again. Admins can still sign in with a password unless `AUTH_LOCAL_LOGIN=off`.
+
+??? failure "The container refuses to start"
+    A provider is listed in `AUTH_PROVIDERS` without all its variables, `MICROSOFT_TENANT_ID` isn't a GUID, `OIDC_ISSUER` isn't `https`, or `AUTH_LOCAL_LOGIN` conflicts with `AUTH_PROVIDERS`. The startup error names the variable.
+
+## Next steps
+
+- [Users and roles](users-and-roles.md)
+- [Configuration](../getting-started/configuration.md)
+- [Security](../concepts/security.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/users-and-roles/ -->
+# Manage users and roles
+
+This guide shows you how to create the first admin, invite people, give each one the right role, and handle lost passwords and authenticators.
+
+Each person has exactly one role. Roles are fixed: there is no role editor.
+
+## Before you start
+
+- The platform database is migrated. See [Install](../getting-started/install.md).
+- To email invitations, set `SMTP_URL` (`smtp://` or `smtps://`) and `SMTP_FROM` together. Without them, AlgoBridge shows each link to the admin once, to pass on yourself.
+- If people will sign in through SSO, set that up first. See [Set up sign-in](sso.md).
+
+## Roles and what they allow
+
+| Role | Can |
+|---|---|
+| **viewer** | See sync status, mappings, activity and errors, and the **Jobs & workers** page. |
+| **member** | Everything a viewer can, plus create, edit and delete mappings, retry failed records, and operate sync (retry, cancel, redrive and dismiss jobs). |
+| **admin** | Everything, including connections, users and the Live log. |
+
+The permissions behind each role:
+
+| Permission | viewer | member | admin |
+|---|:-:|:-:|:-:|
+| `sync.view` | ✓ | ✓ | ✓ |
+| `errors.view` | ✓ | ✓ | ✓ |
+| `records.retry` | | ✓ | ✓ |
+| `sync.operate` | | ✓ | ✓ |
+| `mappings.manage` | | ✓ | ✓ |
+| `mappings.delete` | | ✓ | ✓ |
+| `connections.manage` | | | ✓ |
+| `users.manage` | | | ✓ |
+| `settings.manage` | | | ✓ |
+| `logs.view` | | | ✓ |
+| `alerts.receive` | | | ✓ |
+| `webhooks.manage` | | | ✓ |
+| `tokens.manage` | | | ✓ |
+| `audit.view` | | | ✓ |
+
+Pages a person can't use are hidden from their navigation.
+
+## Create the first admin
+
+The first admin is created from the command line, on the server.
+
+1. Run the migrations, if you haven't:
+
+    ```bash
+    docker compose -f deploy/docker-compose.yml run --rm app migrate
+    ```
+
+2. Create the admin:
+
+    ```bash
+    docker compose -f deploy/docker-compose.yml run --rm app create-admin --email you@example.com --name "Your Name"
+    ```
+
+    Outside Docker, run `node dist/cli/create-admin.js` with the same options.
+
+3. The command prints a set-password link once. Open it, choose a password, and sign in.
+
+The link works once and expires in 7 days.
+
+## Invite a person
+
+1. Open **Instance → Users** and click **Invite person**.
+2. Enter their **Email**, optionally their **Name**, and choose a **Role**.
+3. Click **Create invite link**.
+
+What happens next depends on how they sign in:
+
+- **Password sign-in**: they get a set-password link that works once and expires in 7 days. With SMTP set, it is emailed: *Invitation emailed. The link works once and expires in 7 days.* Without SMTP, the page shows the link with **Copy link**. It isn't shown again.
+- **SSO**: they click their provider's button. AlgoBridge matches the invite by verified email.
+
+Invited users show as **Invited** until they accept. If the link expires, the row shows **Link expired**: click **New link**.
+
+## Change a role
+
+Click **Change** next to the person's role, pick the new role, and save.
+
+You can't change your own role. Another admin has to.
+
+## Reset a password
+
+There is no self-service "forgot password". To reset one:
+
+1. On **Instance → Users**, click **Reset link** for the person.
+2. Send them the link, or let SMTP email it.
+
+The link works once and expires in 7 days. A disabled user can't get a link until you enable them.
+
+## Turn off two-step verification for someone
+
+If a person loses their authenticator:
+
+1. Click **Turn off two-step** on their row.
+2. Confirm with **Turn off**.
+
+They are signed out everywhere, any outstanding links are revoked, and they sign in with their password alone. They can set two-step verification up again from **Account**. This isn't offered for SSO users, who don't use AlgoBridge codes.
+
+## Disable and enable users
+
+Click **Disable** to stop a person signing in. Their sessions end immediately. Users are never deleted.
+
+Click **Enable** to let them back in. If they never set a password, send them a new link.
+
+## Rules that protect access
+
+- You can't change your own role or disable yourself.
+- The last active admin can't be demoted or disabled. Make another user an admin first.
+- The `create-admin` command works in every sign-in mode, so you can always recover access. If you're locked out, create another admin with a new email address.
+
+## Troubleshooting
+
+??? failure "This is the last active admin. Make another user an admin first."
+    Promote someone else to admin, then change or disable this account.
+
+??? failure "You cannot change your own role or status. Ask another admin."
+    Ask another admin, or create one with `create-admin`.
+
+??? failure "This person has not accepted their invitation yet. Send them a new link instead."
+    The person hasn't set a password yet, so there's nothing to reset. Click **New link**.
+
+??? failure "A disabled user cannot get a set-password link. Enable them first."
+    Click **Enable**, then send the link.
+
+??? failure "Link not valid"
+    Password links work once and expire after 7 days. Ask an admin for a new one.
+
+## Next steps
+
+- [Set up sign-in](sso.md)
+- [Security](../concepts/security.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/guides/workers-and-jobs/ -->
+# Run workers and jobs
+
+This guide shows you how to split the console and the sync work into separate containers, scale workers, stop them safely, and read the **Jobs & workers** page when something gets stuck.
+
+All background work, such as sync ticks, loads, the watchdog and cleanup, runs as jobs in PostgreSQL. The jobs live in the `algobridge_jobs` schema of the platform database. There is no Redis, broker or external queue to run. See [Architecture](../concepts/architecture.md).
+
+## Before you start
+
+- AlgoBridge is installed and the platform database is migrated. See [Install](../getting-started/install.md).
+- You can set environment variables and restart containers in your runtime.
+
+## Choose a role for each container
+
+`APP_ROLE` decides what a container does:
+
+| `APP_ROLE` | Serves the console | Runs jobs |
+|---|---|---|
+| `all` | Yes | Yes |
+| `web` | Yes | No |
+| `worker` | No | Yes |
+
+A single `all` container is enough for most installs. Run `web` and `worker` containers separately when you want to scale the console and the sync work independently, or keep sync running while you restart the console.
+
+Every container, whatever its role, needs the same `DATABASE_URL` and the same `ENCRYPTION_KEY`.
+
+## Split web and worker
+
+1. Run the migrate role once for the version you're deploying:
+
+    ```bash
+    docker compose -f deploy/docker-compose.yml run --rm app migrate
+    ```
+
+    Outside Docker, run `node dist/cli/migrate.js`. It applies the platform migrations and installs or upgrades the job schema. It is safe to run more than once.
+
+2. Start one or more containers with `APP_ROLE=web`, behind your load balancer.
+3. Start one or more containers with `APP_ROLE=worker`. Workers need outbound access to Salesforce and the client database, but no inbound traffic.
+4. Open **Instance → Jobs & workers** and check that each worker appears under **Workers** with its role.
+
+A container that starts before migrate has run refuses to boot with *The job schema is not installed. Run the migrate role first.*
+
+## Scale workers
+
+Workers share the queues. Each sync key runs on one worker at a time, so adding workers spreads keys across them rather than running a key twice. If a worker dies mid-job, another worker takes the job over, usually within 16 to 25 seconds.
+
+Each container polls the platform database every 2 seconds. That costs a few cheap queries per container, so run as many workers as the sync load needs and no more.
+
+## Stop a container safely
+
+On `SIGTERM`, a worker stops taking new jobs and lets the running ones finish, for up to 30 seconds. It then marks itself stopped and closes its connections.
+
+Give every container a stop timeout longer than 30 seconds, so your runtime never kills it first:
+
+=== "Docker Compose"
+
+    ```yaml
+    services:
+      app:
+        stop_grace_period: 45s
+    ```
+
+    The file in `deploy/docker-compose.yml` already sets this. Keep it when you copy the `deploy` folder. The Compose default is 10 seconds.
+
+=== "Docker"
+
+    ```bash
+    docker stop --time 45 <container>
+    ```
+
+    The default is 10 seconds.
+
+=== "Kubernetes"
+
+    ```yaml
+    spec:
+      terminationGracePeriodSeconds: 45
+    ```
+
+    The default is 30 seconds, exactly the drain deadline, so set it explicitly.
+
+On any other runtime, set its stop or drain timeout to 45 seconds or more.
+
+If a container is killed before it finishes draining, its jobs are taken over once their heartbeat lapses, and its worker row shows as online until it goes stale.
+
+## Upgrade
+
+1. Run migrate for the new version.
+2. Roll out the web and worker containers.
+
+Workers drain and hand over as described above, so a rolling restart doesn't lose work.
+
+## Read the Jobs & workers page
+
+**Instance → Jobs & workers** shows:
+
+- **Workers**: each worker's role, host, start time, last seen time and jobs in flight.
+- **Queues**: per-queue counts of waiting, active and retrying jobs, completed and failed in the last 24 hours, and the queue's state.
+- **Jobs**: the job list, filtered by state (waiting, active, retrying, failed, completed, cancelled) and queue, with each job's key, retries and last error.
+- **Engine warnings** from the last 24 hours.
+
+The page refreshes every 5 seconds while the tab is visible. Job payloads are never shown.
+
+Everyone can see the page. Members and admins can also retry, cancel, redrive and dismiss.
+
+### Queue states
+
+| State | Meaning |
+|---|---|
+| healthy | Jobs are being picked up on time. |
+| backlog | Some ready jobs have waited more than 30 seconds. |
+| failing | A job in this queue failed in the last 24 hours. |
+| idle | No jobs in the last 24 hours. |
+| dead letter | The dead letter queue holds jobs. |
+
+### Notices in the navigation
+
+Every page marks **Jobs & workers** in the navigation when something needs attention:
+
+- **No worker is running. Sync is paused.** with a `!` badge: a worker has run before, and none has checked in for 30 seconds. Start a `worker` or `all` container.
+- **N jobs in dead letter**: jobs used up their retries. Open the page, read the last error, fix the cause, then redrive.
+
+## Handle dead letter jobs
+
+A sync tick that fails five times moves to the dead letter queue. Meanwhile, the watchdog runs once a minute and restarts any sync key that has no queued tick, so sync resumes before anyone acts.
+
+1. Open **Instance → Jobs & workers** and read the **Last error** of the dead letter jobs.
+2. Fix the cause, for example a revoked Salesforce token or a missing database privilege.
+3. Click **Redrive** on the queue and confirm with **Redrive jobs**. The jobs go back to their original queues.
+4. If the notice says some jobs were left, their sync key is already queued or running again. Click **Dismiss** and confirm with **Dismiss jobs**. Dismissed jobs are cancelled and kept, with their last error, under the cancelled state until retention removes them.
+
+A sync key that fails with a configuration or authentication error isn't retried as usual. The watchdog restarts it within a minute, so it retries about once a minute until you fix the problem.
+
+## Retention
+
+- Completed and failed jobs are kept for 14 days, then deleted.
+- Worker rows silent for an hour are pruned hourly. The most recent one is always kept.
+- Salesforce API usage rows older than 30 days are pruned hourly.
+
+## Troubleshooting
+
+??? failure "The job schema is not installed. Run the migrate role first."
+    Run `migrate` for this version, then start the container again.
+
+??? failure "No worker is running. Sync is paused."
+    No `worker` or `all` container has checked in for 30 seconds. Start one, and check its logs if it exits at boot.
+
+??? failure "Another job for that key is already queued or running"
+    You tried to retry or redrive a job whose sync key already has a job, usually because the watchdog restarted it. Dismiss the old job instead.
+
+??? failure "A worker still shows as online after it stopped"
+    It was killed before it could mark itself stopped. Its jobs are taken over once their heartbeat lapses, and the row goes stale. Raise the container's stop timeout to 45 seconds.
+
+??? failure "The same error repeats about once a minute"
+    A configuration or authentication error is being retried by the watchdog. Read the error on the page or in the [Live log](live-log.md) and fix the cause, for example reconnecting Salesforce.
+
+## Next steps
+
+- [Read the Live log](live-log.md)
+- [Configuration](../getting-started/configuration.md)
+- [Architecture](../concepts/architecture.md)
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/ -->
+# AlgoBridge documentation
+
+AlgoBridge keeps one Salesforce org and one PostgreSQL database in two-way sync. It runs as one container image next to a PostgreSQL you own, and it counts every Salesforce API call it spends. These pages follow the order you meet things: install, connect both ends, map your first object, then run it day to day.
+
+New to AlgoBridge? Read [how it works](/how-it-works/) first, or estimate your org's API cost with the [API calculator](/salesforce-api-calculator/).
+
+## Start here
+
+| Step | Page | What you do |
+|---|---|---|
+| 1 | [Install](getting-started/install.md) | Run the container image with a PostgreSQL database of its own, and create the first admin. |
+| 2 | [Salesforce connection](guides/salesforce-connection.md) | Connect your org through OAuth and check its API usage. |
+| 3 | [Client database](guides/client-database.md) | Point AlgoBridge at the PostgreSQL database your applications use. |
+| 4 | [Your first sync](getting-started/first-sync.md) | Map an object, provision its table and run the initial load. |
+| 5 | [Change sources](guides/change-sources.md) | Choose how AlgoBridge learns about changes in Salesforce, and what it costs. |
+{ .ab-steps }
+
+## The sections
+
+- **[Getting started](getting-started/index.md)**: installation, the first sync and configuration.
+- **[Guides](guides/index.md)**: one task each, from mappings and the Apex bundle to single sign-on, users, the live log and scaling workers.
+- **[Concepts](concepts/index.md)**: how the sync works in each direction, the change notifier, the API budget, conflicts and security.
+- **[Release notes](release-notes.md)**: what has been built, newest first.
+
+## Before you buy anything
+
+AlgoBridge is free. [Pricing](/pricing/) explains registration keys and the paid help CloudAlgo offers, and the [FAQ](/faq/) answers the common questions. To talk to someone about your setup, [get early access](/early-access/).
+
+---
+
+<!-- https://bridge.cloudalgo.com/docs/release-notes/ -->
+# Release notes
+
+!!! warning "AlgoBridge v2 is in development"
+    Version 2 has not been released yet. It is a ground-up redesign, and the features below are built and tested but not yet published as a release. Some features are still to come; see [Still to come](#still-to-come). Expect changes before the first release.
+
+This page lists what has been built so far, in the order it was built, newest first. Dates are when the work joined the main branch.
+
+## Registration keys
+
+*2026-10-16*
+
+- **Every instance needs a free registration key.** The key must fit the Salesforce org's kind: production, sandbox or Developer Edition. It is verified inside the instance, so it needs no network. See [Registration keys](/pricing/#registration-keys).
+- **A License panel in Settings** to save or remove the key, see its state, and paste a status token from CloudAlgo by hand. `LICENSE_KEY` sets the key from the environment instead.
+- **Sync pauses, nothing fails.** A missing, wrong-kind, suspended or expired license holds back all Salesforce work; jobs complete and no change is lost. Alerts, the `algobridge_license_state` metric and the `license` field of `GET /api/v1/status` report the state.
+- **Nothing is sent to CloudAlgo yet.** The automatic daily check-in is planned for a later release.
+
+## Alerts, webhooks, the API and Settings
+
+*2026-10-16*
+
+- **Alerts** on their own screen and by email, through your SMTP server.
+- **Webhooks**: signed events about alerts, mappings and connections, sent to endpoints you add.
+- **An audit log** of console actions.
+- **The `/api/v1` API** with access tokens, and **configuration as code** for mappings.
+- **Schema drift checks** that notice when a mapped field or column changes on either side.
+- **A status page, metrics and a Settings page** for instance settings.
+
+## 0.9.0-rc.1
+
+*2026-10-16*
+
+- **The first release candidate.** AlgoBridge now has a version number, and each release is a container image, `ghcr.io/cloudalgo/algobridge`, built for `amd64` and `arm64`. Release candidates are for testing and are not public; the first public release comes later.
+- **Install from a pinned image.** The reference Compose file pulls the release you name in `deploy/.env` instead of building from source, and never uses `latest`. See [Install](getting-started/install.md).
+- **Signed and scanned.** Every image is signed, checked for critical vulnerabilities before release, and carries a software bill of materials. See [Verify the image](getting-started/install.md#verify-the-image).
+
+## Change notifier
+
+*2026-10-06*
+
+- **Push notifications from Salesforce.** Record-triggered Flows tell AlgoBridge which objects changed, so it learns about changes without spending API calls. Notifications carry object names only, never record data. See [Change notifier](concepts/change-notifier.md).
+- **One-click pairing** between the instance and the org, at a cost of 2 API calls, with key rotation and an instant revoke.
+- **Signed requests.** Every notification is signed and checked for key, org, timestamp, replay and rate. Repeated failed requests open an alert.
+- **A slow fallback poll,** hourly by default, catches anything a notification missed.
+- **Your own saves are ignored.** Changes made by AlgoBridge's integration user do not trigger notifications, so synced writes are not echoed back.
+- **Fair to your org.** The notifier leaves 1% of the org's daily asynchronous Apex allowance untouched.
+
+In this version you add the Flows by hand; see [Apex bundle](guides/apex-bundle.md).
+
+## Apex probe and change sources
+
+*2026-10-05*
+
+- **The Apex bundle.** A small, read-only Apex package you can deploy to your org from the console. It answers "has anything changed?" for up to 90 objects in one API call, against 5 per call without it.
+- **Choose your change source:** Composite (the default, nothing to install), Apex probe or change notifier. AlgoBridge verifies your choice before saving it, re-checks it daily, and falls back with an alert if it stops working. See [Change sources](guides/change-sources.md).
+
+## Live log
+
+*2026-10-03*
+
+- **A real-time view of every process's log lines** in the console, for administrators. Follow, pause, filter and copy. Nothing is stored; the log streams only while someone is watching. See [Live log](guides/live-log.md).
+- **Clearer SSO refusals.** When an identity provider refuses a sign-in, the log now records the provider's error code.
+
+## Initial load, Reload and the daily sweep
+
+*2026-09-25*
+
+- **Initial load** of every record when you activate a mapping, over REST or Bulk API, whichever costs fewer calls, with progress on the console.
+- **Reload** empties a table and loads it again. You confirm it by typing the table name.
+- **Daily reconciliation sweep** removes rows Salesforce no longer has and repairs rows that differ. It refuses to delete a large share of a table at once.
+- **Outbound sends on a latency bound:** a batch goes when 200 changes are waiting or the oldest has waited the maximum wait.
+- **Formula fields are blocked** from sync, because polling cannot keep them correct.
+
+## API budget governor and adaptive intervals
+
+*2026-09-21*
+
+- **Soft and hard thresholds** for the org's API usage. Above the soft threshold AlgoBridge slows down; above the hard threshold it pauses Salesforce calls, while changes keep queuing. See [API budget](concepts/api-budget.md).
+- **Adaptive poll intervals.** A quiet object is polled less often, and a busy one returns to its minimum interval.
+
+## Salesforce to PostgreSQL sync
+
+*2026-09-21*
+
+- **Change probes** that check 5 objects per API call before reading anything.
+- **Fetch and apply** of changed records, matched on `sfid` and then on External ID, including deletes.
+- **Conflict policies** per mapping: `sf_wins`, `pg_wins` and `latest_wins`. See [Conflicts](concepts/conflicts.md).
+
+## PostgreSQL to Salesforce sync, Bulk API and Activity
+
+*2026-09-21*
+
+- **Writes to Salesforce** over SOAP, 200 records per call, sending only changed fields, with the new `sfid` written back to your row.
+- **Bulk API v2** for runs of 2,000 records or more.
+- **Retries with backoff** for rejected changes; failures are parked rather than lost.
+- **The Activity screen:** every change in both directions, with filters, record detail and Salesforce's error text. Retry or discard a failed change, or retry all failures.
+
+## Provisioning
+
+*2026-09-19*
+
+- **Tables built for you.** AlgoBridge creates and extends mapped tables, the change log and the capture trigger in your database.
+- **Additive changes only.** It never drops or recreates a table, and it refuses a change that would narrow a column.
+- **You stay in control.** Every change is shown as a diff and runs only when you press Apply. A preflight check names any missing database grant.
+
+## Mappings
+
+*2026-09-18*
+
+- **Map Salesforce objects to tables:** choose fields, set direction (read-only or read-write), pick an External ID, add reference fields.
+- **Choose a write algorithm:** Ordered or Merged.
+
+## Job runner
+
+*2026-09-15*
+
+- **Background jobs coordinated entirely in PostgreSQL,** with a worker registry, automatic takeover when a worker stops, and a watchdog that restarts stalled schedules.
+- **The Jobs and workers screen.** See [Workers and jobs](guides/workers-and-jobs.md).
+
+## Salesforce connection
+
+*2026-09-15*
+
+- **Connect your org** through an External Client App, using OAuth with PKCE against your My Domain. Tokens are stored encrypted.
+- **API usage at a glance.** The connection screen shows the org's API usage and AlgoBridge's own share. See [Salesforce connection](guides/salesforce-connection.md).
+
+## Client database connection
+
+*2026-09-14*
+
+- **Connect your PostgreSQL** from the console or with `CLIENT_DATABASE_URL`. The connection string is stored encrypted. See [Client database](guides/client-database.md).
+- **Encrypted secrets with key rotation,** through the `rotate-encryption-key` command.
+- **A setup checklist** on the dashboard.
+
+## Single sign-on, form protection and user management
+
+*2026-09-14*
+
+- **Single sign-on through OpenID Connect,** with presets for Google Workspace and Microsoft Entra ID and a generic option for other providers. Optional sign-up by email domain, and a setting to require SSO. See [Single sign-on](guides/sso.md).
+- **Every form is protected** by a signed token and a one-time key, so forged and double submissions are refused.
+- **User management:** invitations, role changes, disabling users and admin-issued password-reset links, with optional email over SMTP. See [Users and roles](guides/users-and-roles.md).
+
+## Foundation, sign-in and console shell
+
+*2026-09-13*
+
+- **One container image** that runs as console, worker or both, with health endpoints and a migrate command.
+- **Local sign-in** with argon2id passwords, optional two-step verification and account lockout.
+- **Three roles** (viewer, member, admin), with every route denied unless it names the permission it needs.
+- **The console shell** and the `create-admin` command for the first administrator.
+
+## Still to come
+
+Planned, and not in the current build:
+
+- **Automatic notifier Flows** and a daily check of them, plus mutual TLS and an IP allow-list for the notify endpoint.
+
+Before the first release, single sign-on will be checked against real Google Workspace and Microsoft Entra ID tenants, and the Apex bundle will be checked in a clean Salesforce org.

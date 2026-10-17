@@ -1,0 +1,57 @@
+/* Use-case pages and learn guides: long-form pieces only. Colours come from tokens.css. */
+
+/* a section of prose beside a worked example */
+.ct-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px 56px;align-items:start}
+.ct-split > .prose > :first-child,.ct-split > div > :first-child{margin-top:0}
+@media (max-width:900px){.ct-split{grid-template-columns:1fr}}
+
+/* a labelled worked example: SQL, a result, a timeline */
+.ct-figure{margin:0;display:grid;gap:10px}
+.ct-figure figcaption{font-size:13px;color:var(--ink-3)}
+.ct-figure .artefact{font-size:13px}
+.ct-figure .artefact .cm{color:var(--ink-3)}
+.ct-figure .artefact th{text-align:left;font:600 11.5px var(--sans);color:var(--ink-3);padding:6px 14px;background:var(--surface)}
+
+/* numbered steps with a short body each: cut-over checklists, how-tos */
+.ct-steps{list-style:none;margin:0;padding:0;counter-reset:ct;border-top:2px solid var(--ink)}
+.ct-steps > li{counter-increment:ct;display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 16px;padding:18px 0;border-bottom:1px solid var(--line)}
+.ct-steps > li::before{content:counter(ct);font:500 14px var(--mono);color:var(--accent);width:28px;height:28px;border:1.5px solid var(--accent);border-radius:50%;display:inline-grid;place-items:center}
+.ct-steps h3{font-size:19px;line-height:1.25;margin:2px 0 6px}
+.ct-steps p{margin:0 0 6px;color:var(--ink-2)}
+.ct-steps > li > div > :last-child{margin-bottom:0}
+
+/* plain caveats: what to watch out for */
+.ct-watch{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.ct-watch li{padding:18px 20px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--warn);border-radius:var(--r-panel)}
+.ct-watch b{display:block;font-weight:650;color:var(--ink);margin-bottom:6px}
+.ct-watch span{color:var(--ink-2);font-size:15px}
+@media (max-width:800px){.ct-watch{grid-template-columns:1fr}}
+
+/* links into the docs, ruled like the home page's job lists */
+.ct-docs{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 28px;border-top:1px solid var(--line)}
+.ct-docs li{border-bottom:1px solid var(--line)}
+.ct-docs a{display:block;padding:14px 0;text-decoration:none;color:var(--ink-2);font-size:14.5px;line-height:1.45}
+.ct-docs a b{display:block;color:var(--ink);font-weight:620}
+.ct-docs a:hover b{color:var(--accent)}
+@media (max-width:900px){.ct-docs{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.ct-docs{grid-template-columns:1fr}}
+
+/* guides: a contents list beside the article */
+.ct-article{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px 64px;align-items:start}
+.ct-toc{position:sticky;top:96px;font-size:14px}
+.ct-toc h2{font:620 13px var(--sans);letter-spacing:0;color:var(--ink);margin:0 0 10px}
+.ct-toc ol{list-style:none;margin:0;padding:0;display:grid;gap:8px;border-left:1px solid var(--line)}
+.ct-toc a{display:block;padding-left:14px;color:var(--ink-2);text-decoration:none;line-height:1.35}
+.ct-toc a:hover{color:var(--accent)}
+@media (max-width:980px){.ct-article{grid-template-columns:1fr}.ct-toc{position:static}}
+
+.ct-article .prose{max-width:none}
+.ct-article .prose > :not(.table-scroll){max-width:72ch}
+.ct-article .prose h2{scroll-margin-top:96px}
+.ct-article .prose .table-scroll{margin:18px 0}
+.ct-article .prose .data{min-width:560px}
+.ct-article .prose .data td,.ct-article .prose .data th{padding:10px 12px}
+.ct-article .prose .callout{margin:20px 0}
+.ct-article .prose .ct-figure{margin:20px 0}
+.ct-article .prose sup a{text-decoration:none;font-size:.8em}
+.ct-answer{font-size:var(--t-lg);color:var(--ink)}

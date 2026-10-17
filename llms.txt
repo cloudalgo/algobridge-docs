@@ -1,0 +1,66 @@
+# AlgoBridge
+
+> AlgoBridge is free, self-hosted software that keeps one Salesforce org and one PostgreSQL database in two-way sync. It runs as one container image next to a PostgreSQL 15+ database you own, batches every Salesforce read and write, and is built to spend as few Salesforce API calls as possible. It is made by CloudAlgo. It is free of charge but not open source.
+
+Key facts:
+
+- Direction: both. Salesforce changes are copied into PostgreSQL tables; rows inserted, updated or deleted in read-write tables are sent back to Salesforce.
+- Change detection from Salesforce: SOQL polling behind a cheap change probe (Composite probe: 5 objects per API call; Apex probe: up to 90 objects per call), or the change notifier, where record-triggered Flows tell AlgoBridge which objects changed. Salesforce Change Data Capture is not used.
+- Writes to Salesforce: batched, 200 records per SOAP call, or Bulk API for large runs. Never one call per record.
+- API budget: AlgoBridge's calls count against the org's daily API request limit. A governor slows polling at 70% of the limit and pauses at 90%.
+- Conflicts: a policy per mapping (Salesforce wins, PostgreSQL wins, or latest wins). A failed record holds back only itself and its children.
+- Hosting: AWS, Azure, Google Cloud, their managed Kubernetes services, or Heroku. One instance syncs one org with one database.
+- Price: free, with a free registration key per instance, verified inside the instance with no network call. CloudAlgo sells consulting and support.
+- Status: release candidate 0.9.0-rc.1 being prepared for early access (October 2026); not yet publicly released.
+
+## Product
+
+- [AlgoBridge](https://bridge.cloudalgo.com/): Two-way sync between Salesforce and your own PostgreSQL. Self-hosted in your cloud, free, and built to spend as few Salesforce API calls as possible.
+- [Compare Salesforce Postgres sync options](https://bridge.cloudalgo.com/compare/): AlgoBridge, Heroku Connect, hosted sync services and a home-grown integration compared on hosting, cost, Salesforce API limits and how changes move.
+- [Building your own Salesforce Postgres sync](https://bridge.cloudalgo.com/compare/build-your-own/): What a home-grown Salesforce to PostgreSQL sync has to handle, from change detection and API limits to retries, conflicts, deletes and schema changes.
+- [Heroku Connect alternative: AlgoBridge compared](https://bridge.cloudalgo.com/compare/heroku-connect/): AlgoBridge and Heroku Connect side by side: hosting, cost, Salesforce API limits, change detection, conflicts and failures, with every Heroku fact sourced.
+- [Salesforce Postgres sync tools compared](https://bridge.cloudalgo.com/compare/sync-services/): Hosted Salesforce to PostgreSQL sync services compared with AlgoBridge, which you run yourself: hosting, data path, pricing, API limits and change detection.
+- [Get early access](https://bridge.cloudalgo.com/early-access/): Run AlgoBridge 0.9.0-rc.1, the free self-hosted Salesforce and PostgreSQL sync, on your own org with setup help from CloudAlgo.
+- [FAQ](https://bridge.cloudalgo.com/faq/): Answers about AlgoBridge: what it is, what it costs, what it needs to run, how sync behaves, Salesforce API usage, conflicts, failures and security.
+- [Is AlgoBridge a fit?](https://bridge.cloudalgo.com/fit/): Five questions about where you host, how fresh data must be, sync direction, object count and API headroom, each with an honest note. No score, no sign-up.
+- [How it works](https://bridge.cloudalgo.com/how-it-works/): How AlgoBridge moves changes between Salesforce and PostgreSQL both ways: cheap probes, batched reads and writes, conflict policies and a budget governor.
+- [Salesforce API limits for integrations](https://bridge.cloudalgo.com/learn/salesforce-api-limits/): How Salesforce's daily API request limit works, which calls count, how to see your usage, and how to keep an integration or sync inside it.
+- [How to sync Salesforce to PostgreSQL](https://bridge.cloudalgo.com/learn/sync-salesforce-to-postgres/): Ways to keep Salesforce data in PostgreSQL, from your own API code to Heroku Connect, sync services and ETL tools, compared on effort, API calls and lock-in.
+- [Pricing](https://bridge.cloudalgo.com/pricing/): AlgoBridge is free, with every feature and no per-row charge. From the public release each instance needs a free key. CloudAlgo offers paid help.
+- [Salesforce API calculator](https://bridge.cloudalgo.com/salesforce-api-calculator/): Estimate how many Salesforce API calls a two-way PostgreSQL sync spends a day, hour by hour, against your org's daily limit. Free, no sign-up.
+- [Security](https://bridge.cloudalgo.com/security/): Where AlgoBridge runs, what leaves your network, how people sign in, how secrets are stored, and how registration keys are checked without a network call.
+- [Salesforce and PostgreSQL use cases](https://bridge.cloudalgo.com/use-cases/): What teams do with Salesforce data in their own PostgreSQL: customer portals and apps, reporting in SQL, and leaving Heroku while keeping the sync.
+- [Salesforce reporting in SQL](https://bridge.cloudalgo.com/use-cases/analytics/): Query Salesforce data in your own PostgreSQL, joined with product and billing data. Read-only mappings, a daily repair sweep, and no API call per query.
+- [Customer portals on Salesforce data](https://bridge.cloudalgo.com/use-cases/customer-portals/): Run a customer portal or app on Salesforce data with plain SQL: reads cost no API calls, and inserts go back to Salesforce in batches and get their sfid.
+- [Migrate off Heroku Connect, keep the sync](https://bridge.cloudalgo.com/use-cases/leave-heroku/): Move your PostgreSQL off Heroku and keep two-way Salesforce sync: a cut-over checklist, what changes, and the honest trade-off on API limits.
+
+## Documentation
+
+- [AlgoBridge documentation](https://bridge.cloudalgo.com/docs/): Install AlgoBridge, connect Salesforce and PostgreSQL, map your first object and run two-way sync day to day. Guides, concepts and release notes.
+- [Concepts | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/): How AlgoBridge works and why: sync in each direction, the change notifier, the Salesforce API budget, conflicts and security.
+- [API budget | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/api-budget/): How AlgoBridge's Salesforce API calls count against your org's daily limit, how the budget governor works, and how to estimate calls per day.
+- [Architecture | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/architecture/): AlgoBridge's architecture: one container image, two PostgreSQL databases and one Salesforce org, with no broker, cache or shared disk.
+- [The change notifier | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/change-notifier/): How Salesforce tells AlgoBridge that a record changed, at no API cost per change.
+- [Conflicts | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/conflicts/): When AlgoBridge treats a change as a conflict between Salesforce and PostgreSQL, and how its three conflict policies resolve it.
+- [PostgreSQL to Salesforce | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/postgres-to-salesforce/): How a row inserted, updated or deleted in PostgreSQL reaches Salesforce: trigger capture, batching, SOAP or Bulk API v2, and write-back.
+- [Salesforce to PostgreSQL | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/salesforce-to-postgres/): How a change in Salesforce reaches your PostgreSQL table: watermarks, cheap change probes, batched SOQL fetches and a transactional apply.
+- [Security | AlgoBridge docs](https://bridge.cloudalgo.com/docs/concepts/security/): How AlgoBridge protects your Salesforce org and database: sign-in, roles, forgery-checked writes, encrypted secrets and what leaves your network.
+- [Getting started | AlgoBridge docs](https://bridge.cloudalgo.com/docs/getting-started/): Go from nothing to a first synced table: install AlgoBridge, create the first admin, connect both ends and watch the first records arrive.
+- [Configuration | AlgoBridge docs](https://bridge.cloudalgo.com/docs/getting-started/configuration/): Every environment variable AlgoBridge reads, with its default and what it does, for your Compose file, Kubernetes manifest or platform config.
+- [Your first sync | AlgoBridge docs](https://bridge.cloudalgo.com/docs/getting-started/first-sync/): Connect PostgreSQL and Salesforce, map one object to a table and watch its records load, following the AlgoBridge console screen by screen.
+- [Install | AlgoBridge docs](https://bridge.cloudalgo.com/docs/getting-started/install/): Run AlgoBridge and its platform database with Docker Compose from the signed image, create the first admin and check the instance is healthy.
+- [Guides | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/): Task-by-task guides for setting up and running AlgoBridge: connections, change sources, mappings, single sign-on, users, the live log and workers.
+- [Apex bundle | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/apex-bundle/): Install the AlgoBridge Apex bundle in your Salesforce org, pair the change notifier, add the Flows that drive it and check that it works.
+- [Change sources | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/change-sources/): Choose how AlgoBridge learns about Salesforce changes: the Composite probe, the Apex probe or the change notifier, and what each costs in API calls.
+- [Client database | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/client-database/): Connect AlgoBridge to the PostgreSQL database your application uses: the role's privileges, how the stored URL is protected, and replacing it.
+- [Live log | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/live-log/): Watch AlgoBridge sync in real time in the console's Live log: every SOQL query, Salesforce and PostgreSQL call and job, with follow, pause and filter.
+- [Mappings | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/mappings/): Map a Salesforce object to a PostgreSQL table: choose fields, provision the table, run the initial load, and reload a table when you need a fresh copy.
+- [Salesforce connection | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/salesforce-connection/): Connect AlgoBridge to your Salesforce org with an External Client App and an integration user, and see how much of the org's API limit is in use.
+- [Single sign-on | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/sso/): Set up console sign-in: passwords with two-step verification, or single sign-on through Google Workspace, Microsoft Entra ID or any OpenID Connect provider.
+- [Users and roles | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/users-and-roles/): Create the first admin, invite people, give each the viewer, member or admin role, and recover lost passwords and authenticators in AlgoBridge.
+- [Workers and jobs | AlgoBridge docs](https://bridge.cloudalgo.com/docs/guides/workers-and-jobs/): Split AlgoBridge's console and sync work into separate containers, scale and stop workers safely, and read the Jobs and workers page.
+- [Release notes | AlgoBridge docs](https://bridge.cloudalgo.com/docs/release-notes/): What has been built in AlgoBridge, newest first: alerts, webhooks and the API, the 0.9.0-rc.1 release candidate, the change notifier and more.
+
+## Optional
+
+- [All documentation as one Markdown file](https://bridge.cloudalgo.com/llms-full.txt)
